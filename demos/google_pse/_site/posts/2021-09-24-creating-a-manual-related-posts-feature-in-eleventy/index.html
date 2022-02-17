@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Creating a (Manual) Related Posts Feature in Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Creating a (Manual) Related Posts Feature in Eleventy</h2>
+<p>
+Written: 9/24/2021
+</p>
+
+
+<p>Something I miss from my old blog-ware was the ability to define blog post relationships. While editing a post, I could easily select posts I wanted to create a connection with. When the blog post was rendered, these related entries were shown at the end in a consistent manner. These relationships were bidirectional so if post A linked to C, when rendering C I'd render a link to A as a related post. I was curious how this could be done with <a href="https://www.11ty.dev">Eleventy</a>.</p>
+<p>To be clear, there's already posts out there showing how to automate this process. So for example, given a blog post written in the category of <code>cats</code>, you can select other posts from that category, perhaps randomized, and link to them. I can see that being a great option to automatically entire readers to check out other content on your blog.</p>
+<p>But for this demo, I wanted a way to manually define this. I specifically want this post X to link to post Y. To make this work, I knew I needed to define the relationship in front matter. The question was - how? In my older blog, everything was database driven. Every blog post had a unique ID and then I had a join table for relationships. You don't get that for Eleventy.</p>
+<p>What you do have are <a href="https://www.11ty.dev/docs/data-eleventy-supplied/">page properties</a>. One of those properties is the <a href="https://www.11ty.dev/docs/data-eleventy-supplied/#filepathstem"><code>filePathStem</code></a>. Given a file like <code>/posts/alpha.md</code>, this will be <code>/posts/alpha</code>. This should be a unique value that is - probably - an easy thing for an Eleventy author to refer to.</p>
+<p>So for example, if I wrote a post last year about my top ten cats, I know it's at <code>/posts/top-ten-cats.md</code> and I'd know the filePathStem should be <code>/posts/top-ten-cats</code>. Based on this, I could reference it in my front matter:</p>
+<pre><code class="language-html">---
+layout: post
+title: Gamma Post
+tags: posts
+date: 2020-10-10 12:00:00
+related:
+    - /posts/top-ten-cats
+---
+
+This is the Gamma post.
+</code></pre>
+<p>I've created a <code>related</code> property in my front matter as an array so I could related to multiple items, but certainly you can link to just one too.</p>
+<p>Once that was done, I then edited my post layout like so:</p>
+<pre><code class="language-html">---
+layout: layout
+---
+
+&lt;h2&gt;{{ title }}&lt;/h2&gt;
+&lt;p&gt;&lt;i&gt;Published {{ date | dtFormat }}&lt;/i&gt;&lt;/p&gt;
+
+{{ content }}
+
+{% if related %}
+	&lt;h2&gt;Related Entries&lt;/h2&gt;
+	{% assign relatedEntries = related | getRelated:collections.all %}
+	&lt;ul&gt;
+	{% for entry in relatedEntries %}
+	&lt;li&gt;&lt;a href=&quot;{{ entry.filePathStem }}&quot;&gt;{{ entry.data.title }}&lt;/a&gt;&lt;/li&gt;
+	{% endfor %}
+	&lt;/ul&gt;
+{% endif %}
+
+</code></pre>
+<p>THe top portion is the basic layout and the <code>if</code> at the bottom is where the magic happens. If a post has related items, I need to get the 'real' objects so I can link to them. I do that via a filter called <code>getRelated</code>. Eleventy filters don't have access to collections so I need to pass it as a second argument. Remember that in a filter, the item <em>before</em> the filter name is the first argument. The result of this filter is a list of regular page objects so I can link out as usual.</p>
+<p>Here's the filter in my <code>.eleventy.js</code> file:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getRelated&quot;, function(relatedPosts, all) {
+	/*
+	relatedPosts is an array of filePathStems, return an array
+	of page obs that match
+	*/
+	
+	return all.filter(p =&gt; {
+		return relatedPosts.includes(p.filePathStem);
+	});
+	
+});
+</code></pre>
+<p>One thing to note about this solution - its unidirectional. In theory you could make this work both ways. I'd remove the condition from the template (since the page you link to may have no related items defined) and then use code that looks at the current page's filePathStem to see if anyone links to it. I was ok with it being unidirectional but that's a modification that could be done. Here's how it looks in the awesomely designed demo I built:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/09/related1.jpg" alt="A blog post showing related entries in a list at the bottom." class="lazyload imgborder imgcenter">
+</p>
+<p>If you want to play with this, you can grab the source here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/relatedentries">https://github.com/cfjedimaster/eleventy-demos/tree/master/relatedentries</a></p>
+<p>Photo by <a href="https://unsplash.com/@jjying?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">JJ Ying</a> on <a href="https://unsplash.com/s/photos/links?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

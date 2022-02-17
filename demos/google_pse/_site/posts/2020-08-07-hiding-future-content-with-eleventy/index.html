@@ -1,0 +1,87 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Hiding Future Content with Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Hiding Future Content with Eleventy</h2>
+<p>
+Written: 8/6/2020
+</p>
+
+
+<p>Here's a quick tip for something that's been on my mind lately with <a href="https://www.11ty.dev">Eleventy</a> - hiding content so that it's published but not linked. What do I mean by that? Eleventy doesn't support the idea of &quot;drafts&quot; such that you can have content locally but not in production. You can use <code>permalink: false</code> (documented <a href="https://www.11ty.dev/docs/permalinks/#disable-templating-in-permalinks">here</a>) to stop a page from being output, but it will still exist in collections. I thought a more useful case may be the ability to publish content for the future such that they are not listed in collections until their publish date has come to pass. This has the benefit of letting you see the content if you know the URL. This lets you write a post for next week, publish, and share the URL with a reviewer. In order for this to be effective though you need to have builds scheduled on a regular basis. It would be simple to schedule a daily, or even hourly, build on Netlify and other platforms (let me know if you want to see an example of that!). Let's consider a simple example.</p>
+<p>First, I build an Eleventy site that contained one index page:</p>
+<pre><code class="language-html">
+&lt;h2&gt;Posts&lt;/h2&gt;
+
+&lt;ul&gt;
+
+{% for post in collections.posts  %}
+	&lt;li&gt;&lt;a href=&quot;{{ post.url }}&quot;&gt;{{ post.data.title }}&lt;/a&gt; - {{ post.date }}&lt;/li&gt;
+{% endfor %}
+
+&lt;/ul&gt;
+</code></pre>
+<p>I then added a <code>posts</code> subdirectory with three blog posts. Each blog post had front matter like so:</p>
+<pre><code class="language-html">---
+title: Alpha Post
+tags: posts
+date: 2020-08-02
+---
+</code></pre>
+<p>Notice the date. For my three posts I picked two dates in the past and one in the future.</p>
+<p>My first attempt at hiding the future post was via <a href="https://www.11ty.dev/docs/filters/#universal-filters">universal filter</a>:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;released&quot;, posts =&gt; {
+	let now = new Date().getTime();
+	return posts.filter(p =&gt; {
+		if(now &lt; p.date.getTime()) return false;
+		return true;
+	});
+});
+</code></pre>
+<p>Basically I take the current time (which remember will be build time, hence my warning above about having a scheduled build process) and compare it to the post time. To use this in my index page, I just did this:</p>
+<pre><code class="language-html">&lt;h2&gt;Posts&lt;/h2&gt;
+
+{% assign posts = collections.posts | released %}
+&lt;ul&gt;
+{% for post in posts  %}
+	&lt;li&gt;&lt;a href=&quot;{{ post.url }}&quot;&gt;{{ post.data.title }}&lt;/a&gt; - {{ post.date }}&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>And that worked like a charm. But in order for it to be effective I'd have to ensure I used the filter everywhere I get content. Another option would be to use a <a href="https://www.11ty.dev/docs/collections/">custom collection</a>. I've used this before but only via the glob option. Being able to build a collection on another collection is sweet:</p>
+<pre><code class="language-js">eleventyConfig.addCollection(&quot;releasedPosts&quot;, function(collectionApi) {
+
+	return collectionApi.getFilteredByTag(&quot;posts&quot;).filter(p =&gt; {
+		let now = new Date().getTime();
+		if(now &lt; p.date.getTime()) return false;
+		return true;
+	});
+});
+</code></pre>
+<p>Now I can change my home page to iterate over the new collection:</p>
+<pre><code class="language-html">&lt;ul&gt;
+{% for post in collections.releasedPosts  %}
+	&lt;li&gt;&lt;a href=&quot;{{ post.url }}&quot;&gt;{{ post.data.title }}&lt;/a&gt; - {{ post.date }}&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>It's a small change I suppose but feels a bit safer. Both solutions also leave us open to changing the logic at some later time. For example, maybe I want to use another piece of front matter, like <code>hide: true</code>, instead.</p>
+<p>Again, this does <em>not</em> stop Eleventy from publishing the URL, but with nothing linking too it it's going to be (mostly) safe. Certainly safe enough for the process of having someone take a look at a post for review, or heck, even just to have it published later. Anyway, I hope this helps, and you can get the source for this here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/hide_tests">https://github.com/cfjedimaster/eleventy-demos/tree/master/hide_tests</a></p>
+<p><span>Photo by <a href="https://unsplash.com/@michaelwb?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Michael Browning</a> on <a href="https://unsplash.com/s/photos/hidden?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

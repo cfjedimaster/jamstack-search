@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue and Form Fields</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue and Form Fields</h2>
+<p>
+Written: 1/26/2020
+</p>
+
+
+<p>Vue has great support for working with forms. This is heavily documented in the <a href="https://vuejs.org/v2/guide/forms.html">Form Input Bindings</a> section. I wanted to build my own demo/set of examples based on this as a way of exploring the different types of inputs and how Vue works with them. In order to do this, I built a demo that covered every single type of form field possible. (As far as I know, let me know what I forgot.) For each I tested setting an initial value and outputting the bound value in case it looked different than what the field displayed, <code>input[type=color]</code> is a great example of this.</p>
+<p>If you don't want to read my long winded text, you can jump right to the CodePen here: <a href="https://codepen.io/cfjedimaster/pen/vYEMgjV?editors=1011">https://codepen.io/cfjedimaster/pen/vYEMgjV?editors=1011</a></p>
+<p>Ok, let's get started! Please note some of these are boring, i.e. they work as expected with no weirdness.</p>
+<h3>input[type=text]</h3>
+<p>The simplest and easiest of the fields, and what the &quot;fancy&quot; fields (like <code>type=color</code>) turn into when run on older browsers. I tested with this markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;text1&quot;&gt;text:&lt;/label&gt; 
+&lt;input v-model=&quot;text1&quot; id=&quot;text1&quot; type=&quot;text&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;label for=&quot;text2&quot;&gt;text (maxlength=5):&lt;/label&gt; 
+&lt;input v-model=&quot;text2&quot; id=&quot;text2&quot; type=&quot;text&quot; maxlength=5&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And this data:</p>
+<pre><code class="language-js">text1:'Ray',
+text2:'Raymond Camden',
+</code></pre>
+<p>Notice the second field makes use of <code>maxlength</code>. On initial display, both work as expected, but in the second one you can only delete characters, not add them, until the length is less than five.</p>
+<h3>input[type=button]</h3>
+<p>I used this markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;button1&quot;&gt;button:&lt;/label&gt; 
+&lt;input v-model=&quot;button1&quot; id=&quot;button1&quot; type=&quot;button&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>and this data:</p>
+<pre><code class="language-js">button1:'button1',
+</code></pre>
+<p>And it just renders a button where the label is the model value.</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields1.png" alt="button" class="imgborder imgcenter">
+<h3>input[type=checkbox]</h3>
+<p>Ok, this is a fun one. Checkboxes allow you to specify zero, one, or multiple items. I used this markup to dynamically render the checkboxes:</p>
+<pre><code class="language-html">&lt;p&gt;
+checkbox:&lt;br/&gt;
+&lt;span v-for=&quot;(cbv,idx) in checkbox1Values&quot;&gt;
+&lt;input v-model=&quot;checkbox1&quot; :value=&quot;cbv&quot; type=&quot;checkbox&quot;
+		:id=&quot;'checkbox1'+idx&quot;/&gt; &lt;label :for=&quot;'checkbox1'+idx&quot;&gt;{{ cbv }}&lt;/label&gt;&lt;br/&gt;
+&lt;/span&gt;
+&lt;/p&gt;
+</code></pre>
+<p>Here is the data:</p>
+<pre><code class="language-js">checkbox1: ['red', 'blue'],
+checkbox1Values: ['red', 'blue', 'green', 'orange' ], 
+</code></pre>
+<p>A few things to note here. I've got N inputs based on the total number of items in the array. Each one has a specific value, but the <code>v-model</code> points to the selected value I've defined. Also note when I iterate I include the loop index, this lets me specify a dynamic ID value for each and use a label to make it easier to use.</p>
+<p>The default value, if you want to specify it, is an array.</p>
+<h3>input[type=color]</h3>
+<p>The first one that may not be supported in your browser, it worked just fine in the shiny new Microsoft Edge. Here's the layout:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;color1&quot;&gt;color:&lt;/label&gt; 
+&lt;input v-model=&quot;color1&quot; id=&quot;color1&quot; type=&quot;color&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>and here is the data:</p>
+<pre><code class="language-js">color1:'#cc8800',
+</code></pre>
+<p>This is the first control where, by itself, you can't see the real value:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields2.png" alt="Color example" class="imgborder imgcenter">
+<p>When I first tried this, I attempted to set <code>color1</code> to a named color, but that isn't supported, it must be an RBG value in hex. This is - of course - <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/color">documented</a> over at MDN.</p>
+<h3>The date inputs</h3>
+<p>To make things a bit easier, let's consider the date related field types: date, datetime-local, month, time, and week. Altogether, their markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;date1&quot;&gt;date:&lt;/label&gt; 
+&lt;input v-model=&quot;date1&quot; id=&quot;date1&quot; type=&quot;date&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;label for=&quot;datetimelocal1&quot;&gt;datetime-local:&lt;/label&gt;
+&lt;input v-model=&quot;datetimelocal1&quot; id=&quot;datetimelocal1&quot; type=&quot;datetime-local&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;label for=&quot;month1&quot;&gt;month:&lt;/label&gt;
+&lt;input v-model=&quot;month1&quot; id=&quot;month1&quot; type=&quot;month&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;label for=&quot;time1&quot;&gt;time:&lt;/label&gt; 
+&lt;input v-model=&quot;time1&quot; id=&quot;time1&quot; type=&quot;time&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;label for=&quot;week1&quot;&gt;week:&lt;/label&gt; 
+&lt;input v-model=&quot;week1&quot; id=&quot;week1&quot; type=&quot;week&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>All in all, there's nothing special about any of these markup wise, but UI wise they all render somewhat differently across different browsers (and not at all in <a href="https://caniuse.com/#feat=input-datetime">Safari</a> because of course not).</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields3.png" alt="Date related one" class="imgborder imgcenter">
+<p>Some work as expected, like date opening up a calendar (again, in Microsoft Edge), but then it gets more complex from there. Week, for example, shows this:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields4.png" alt="Example of week control" class="imgborder imgcenter">
+<p>Each of these had slightly different ways of specifying initial values:</p>
+<pre><code class="language-js">date1:'2020-08-20',
+datetimelocal1:'2020-01-31T12:38:00.000',
+month1:'2020-04',
+time1:'13:14:00.000',
+week1:'2021-W02',
+</code></pre>
+<p>I had to guess at some of these. I'd specify a blank value, set the value, and then check my debug output. (I may have forgot to mention, but at the bottom of my markup I've got a debug region where I output every value.) Week, especially, was surprising.</p>
+<h3>input[type=email]</h3>
+<p>Absolutely nothing special about this - here's the markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;email1&quot;&gt;email:&lt;/label&gt;
+&lt;input v-model=&quot;email1&quot; id=&quot;email1&quot; type=&quot;email&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>and the data:</p>
+<pre><code class="language-js">email1:'raymondcamden@gmail.com',
+</code></pre>
+<h3>input[type=file]</h3>
+<p>Here's a fun one. First note that form fields are readonly, so doing this won't be possible:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;file11&quot;&gt;file:&lt;/label&gt;
+&lt;input v-model=&quot;file1&quot; id=&quot;file1&quot; type=&quot;file&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And:</p>
+<pre><code class="language-js">file1:'c:\\autoexec.bat',
+</code></pre>
+<p>In fact, Vue screams about it in the console:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields5.png" alt="" class="imgborder imgcenter">
+<p>What's cool is that they tell you exactly how to fix it:</p>
+<pre><code class="language-html">&lt;input @change=&quot;setFile&quot; id=&quot;file1&quot; type=&quot;file&quot;&gt;
+</code></pre>
+<p>This can then be tied to a method:</p>
+<pre><code class="language-js">methods:{
+	setFile(e) {
+		console.log('selected file(s)', e.target.files);
+		// grab the file name and do something with it
+	}
+}
+</code></pre>
+<p>This provides you access to information about the files allowing you to do fancy things, like <a href="https://www.raymondcamden.com/2019/06/13/reading-image-sizes-and-dimensions-with-vuejs">figuring the size</a> of images or doing <a href="https://www.raymondcamden.com/2019/05/21/reading-client-side-files-for-validation-with-vuejs">client-side validation</a> of files.</p>
+<h3>input[type=hidden]</h3>
+<p>Works as expected, hidden from the user, nothing to see here, carry on.</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;hidden1&quot;&gt;hidden:&lt;/label&gt;
+&lt;input v-model=&quot;hidden1&quot; id=&quot;hidden1&quot; type=&quot;hidden&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<pre><code class="language-js"> hidden1:'you can\'t see me...',
+</code></pre>
+<h3>input[type=picture]</h3>
+<p>Also nothing special here. I've never used this one in production before but I guess folks have used it.</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;image1&quot;&gt;picture:&lt;/label&gt;
+&lt;input :src=&quot;image1&quot; id=&quot;image1&quot; type=&quot;image&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>My data was a URL path to the image:</p>
+<pre><code class="language-js">image1:'http://placekitten.com/g/200/300',
+</code></pre>
+<p>In case you're curious it is acts like a submit button.</p>
+<h3>input[type=number]</h3>
+<p>Again, nothing really special... at first. So consider this markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;number1&quot;&gt;number:&lt;/label&gt;
+&lt;input v-model=&quot;number1&quot; id=&quot;number1&quot; type=&quot;number&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And this data:</p>
+<pre><code class="language-js">number1:6,
+</code></pre>
+<p>So if you don't modify the value, what's actually there in the DOM?</p>
+<p>6? Nope.</p>
+<p>&quot;6&quot;</p>
+<p>Pat yourself on the back if you knew this. I know this. Of course I do. I still manage to forget about 90% of the time. Vue provides a dang nice way to handle this though. Just add a <code>.number</code> modifier:</p>
+<pre><code class="language-html">&lt;input v-model.number=&quot;number1&quot; id=&quot;number1&quot; type=&quot;number&quot;&gt;
+</code></pre>
+<h3>input[type=password]</h3>
+<p>Again, nothing special. Take this markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;password1&quot;&gt;password:&lt;/label&gt; 
+&lt;input v-model=&quot;password1&quot; id=&quot;password1&quot; type=&quot;password&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And this code:</p>
+<pre><code class="language-js">password1:'kyloren',
+</code></pre>
+<p>And you get a password field where the value is hidden. Don't forget though that you or I can go into devtools and change the field type to text to see the value.</p>
+<h3>input[type=radio]</h3>
+<p>Another one with multiple items, but this one only takes one value, not 0 or more.</p>
+<pre><code class="language-html">&lt;p&gt;
+radio:&lt;br/&gt; 
+&lt;span v-for=&quot;(rbv,idx) in radio1Values&quot;&gt;
+&lt;input v-model=&quot;radio1&quot; :value=&quot;rbv&quot; type=&quot;radio&quot; 
+		:id=&quot;'radio1'+idx&quot;/&gt; &lt;label :for=&quot;'radio1'+idx&quot;&gt;{{ rbv }}&lt;/label&gt;&lt;br/&gt;
+&lt;/span&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And here is the data:</p>
+<pre><code class="language-js">radio1: 'beer',
+radio1Values: ['pizza', 'donuts', 'beer', 'hamburgers' ],
+</code></pre>
+<p>Notice that the selected value is <em>not</em> an array but one value.</p>
+<h3>input[type=range]</h3>
+<p>First the markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;range1&quot;&gt;range:&lt;/label&gt; 
+&lt;input v-model=&quot;range1&quot; id=&quot;range1&quot; type=&quot;range&quot; min=&quot;1&quot; max=&quot;10&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And the value:</p>
+<pre><code class="language-js">range1: 6,
+</code></pre>
+<p>Remember that the browser will <em>not</em> display any numbers with this control:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/fields6.png" alt="Range UI" class="imgborder imgcenter">
+<p>You could use the <code>&lt;output&gt;</code> tag to handle this but it's probably easier to just add <code>{{ range1 }}</code> to the markup.</p>
+<h3>input[type=search]</h3>
+<p>This is mainly the same as a text field with the addition of a little X (or some other UI) to clear the data immediately. Here's the markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;search1&quot;&gt;search:&lt;/label&gt; 
+&lt;input v-model=&quot;search1&quot; id=&quot;search1&quot; type=&quot;search&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>and the data:</p>
+<pre><code class="language-js">search1:'search text',
+</code></pre>
+<p>Still with me? We're almost done.</p>
+<h3>input[type=submit]</h3>
+<p>Another boring one. This time binding the value just sets the value on the button.</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;submit1&quot;&gt;submit:&lt;/label&gt; 
+&lt;input v-model=&quot;submit1&quot; id=&quot;submit1&quot; type=&quot;submit&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<pre><code class="language-js">submit1: 'Submit or Die'
+</code></pre>
+<h3>input[type=tel]</h3>
+<p>This one primarily works on mobile. It should fire up a keyboard better suited for entering phone numbers. On desktop it does nothing special.</p>
+<p>Markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;tel1&quot;&gt;tel:&lt;/label&gt; 
+&lt;input v-model=&quot;tel1&quot; id=&quot;tel1&quot; type=&quot;tel&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And data:</p>
+<pre><code class="language-js">tel1: '555-555-5555',
+</code></pre>
+<h3>input[type=url]</h3>
+<p>And finally, the URL field. Looks the same but will validate differently.</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;url1&quot;&gt;url:&lt;/label&gt; 
+&lt;input v-model=&quot;url1&quot; id=&quot;url1&quot; type=&quot;url&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And code:</p>
+<pre><code class="language-js">url1:'https://www.raymondcamden.com',
+</code></pre>
+<h3>select</h3>
+<p>Did I say finally? Nope, not done yet. Here's how select works. First, the markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+select:&lt;br/&gt; 
+&lt;select v-model=&quot;select1&quot;&gt;
+	&lt;option v-for=&quot;sel in select1Values&quot;&gt;{{ sel }}&lt;/option&gt;
+&lt;/select&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And the values:</p>
+<pre><code class="language-js">select1: 'hbo', 
+select1Values: ['cinemax', 'showtime', 'hbo', 'cbs' ],
+</code></pre>
+<p>A regular select lets you pick one option so the value specified is just a simple string.</p>
+<p>When using the multiple option, things change a tiny bit:</p>
+<pre><code class="language-html">&lt;p&gt;
+select multiple:&lt;br/&gt; 
+&lt;select v-model=&quot;select2&quot; multiple&gt;
+	&lt;option v-for=&quot;sel in select1Values&quot;&gt;{{ sel }}&lt;/option&gt;
+&lt;/select&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And the values:</p>
+<pre><code class="language-js">select2: ['showtime', 'cbs'], 
+select2Values: ['cinemax', 'showtime', 'hbo', 'cbs' ],
+</code></pre>
+<p>The big change here is using an array to set (and work with) the selected values.</p>
+<p>Almost done - honest!</p>
+<h3>textarea</h3>
+<p>First, the markup:</p>
+<pre><code class="language-html">&lt;p&gt;
+&lt;label for=&quot;textarea1&quot;&gt;textarea&lt;/label&gt;
+&lt;textarea v-model=&quot;textarea1&quot; id=&quot;textarea1&quot;&gt;&lt;/textarea&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And then the value:</p>
+<pre><code class="language-js">textarea1:'This is my text area\nIt is better than yours...'
+</code></pre>
+<p>Notice that you do not have to provide a value inside the textarea block. I actually forgot and had this originally: <code>&lt;textarea v-model=&quot;textarea1&quot; id=&quot;textarea1&quot;&gt;{{textarea1}}&lt;/textarea&gt;</code></p>
+<h3>Wrap Up</h3>
+<p>For the most part, there weren't many surprises here, but I know I'm happy to have an example of everything in one place. You can run, and fork, the full example here:</p>
+<p class="codepen" data-height="400" data-theme-id="default" data-default-tab="html,result" data-user="cfjedimaster" data-slug-hash="vYEMgjV" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue Form Examples">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/vYEMgjV">
+  Vue Form Examples</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p><i>Header photo by <a href="https://unsplash.com/@erol?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Erol Ahmed</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

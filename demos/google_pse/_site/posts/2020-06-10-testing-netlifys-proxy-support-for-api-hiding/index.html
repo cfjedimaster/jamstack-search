@@ -1,0 +1,56 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Testing Netlify's Proxy Support for API Hiding</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Testing Netlify's Proxy Support for API Hiding</h2>
+<p>
+Written: 6/9/2020
+</p>
+
+
+<p>For my blog post today I want to play with another Netlify feature, <a href="https://docs.netlify.com/routing/redirects/rewrites-proxies/#proxy-to-another-service">creating a proxy</a> to another service. This is one of those simple things that just plain works. The docs are clear and to the point. That being said, I really wanted to see this for myself in action.</p>
+<p>In a nutshell, Netlify lets you define a URL route for your site that will map to an external site. So for example, I can say a request for <code>/cat</code> will map to <code>htts://thecatapi.com</code>. That by itself isn't necessarily rocket science, but if you tell Netlify to use a 200 status code on the redirect, the network connection will be done entirely on Netlify's side and the end user never sees the redirect.</p>
+<p>This means a lot of things. If you were using serverless functions just to hide an API key, you don't need to anymore. If you were using serverless functions to create an abstraction (in case you move from remote service A to remote service B), you may not need to do that anymore. While certainly not applicable to every case, it does mean that for simple key hiding and the such you don't have to write a lick of code.</p>
+<p>As I said, this was documented well but I wanted to see it for myself. For my test, I decided to create a proxy to HERE's (my employer!) <a href="https://developer.here.com/products/geocoding-and-search">Geocoding and Search API</a>. Now before I go any further, note that the keys you create for our services <em>absolutely 100%</em> allow you to use them in client-side applications and you can (<strong>should</strong>) use the host name restriction feature to ensure they can only be used in one place. My demo was simple - on load, make a request for places near a hard coded location within a hard coded category (food places). I live in Louisiana so I knew this would return upwards of three to four million results or so.</p>
+<p>Here's how it looks in client-side code:</p>
+<pre><code class="language-js">const app = new Vue({
+	el:'#app',
+	data: {
+		results:null
+	},
+	async created() {
+		let result = await fetch('/geosearch?at=30.22,-92.02&amp;cat=101-070');
+		let data = await result.json();
+		this.results = data.items;
+	}
+});
+</code></pre>
+<p>Note that the hard coded values for <code>at</code> and <code>cat</code> could absolutely be dynamic. I was testing Netlify here, not our API. When run in the browser, you see this in network tools:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/06/nr1.png" alt="Network request" class="lazyload imgborder imgcenter">
+</p>
+<p>If you dig into the headers and such nothing there will reveal what the destination is either. To make this work, I added a file, <code>_redirects</code>, which this:</p>
+<pre><code>/geosearch/* at=:at cat=:cat https://browse.search.hereapi.com/v1/browse?apiKey=H2HPEplnWZvYwdCxIeyaFJf_RhOLUMzQXip2ADBNupY&amp;at=:at&amp;categories=:cat 200
+</code></pre>
+<p>As I said, the docs were good, but it did take me a minute or two to wrap my head around how query string parameters work. You do <em>not</em> include them in the route itself, but they after in a space delimited format. Order does not matter. I then map everything to the destination URL. Finally, I add the status code. Technically you don't need it if you aren't concerned with folks seeing the destination path. Why would you bother then? Because this will <strong>also</strong> fix cases where CORS isn't setup. I've often used the <a href="https://affiliate.itunes.apple.com/resources/documentation/itunes-store-web-service-search-api/">iTunes Search API</a> in demos but stopped because <em>some</em> of the machines in their cluster don't support CORS. This would correct it.</p>
+<p>So why <em>wouldn't</em> you use this versus a serverless function? If I use a serverless function I have more control over the data that's returned. An API might return 10-20 values where my code only needs 2-3. I can return a smaller subset and reduce the network traffic. I can also transform values if the API is, well, weird. Maybe it returns XML because it thinks we're still in the 90s. You get the idea. In these cases, a serverless function lets me massage the data before my front end works with it. Best of all, if I switch providers, I can take their data and reformat it to match the last provider. Of course, you could use the simple redirect feature for now and switch to serverless later using the same path!</p>
+<p>If you want to see my simple demo in action, go to <a href="https://netlifydemos.netlify.app/test_proxy.html">https://netlifydemos.netlify.app/test_proxy.html</a> and you can see the complete source over at <a href="https://github.com/cfjedimaster/NetlifyTestingZone">https://github.com/cfjedimaster/NetlifyTestingZone</a>.</p>
+<p>Oh, a quick note. Obviously a public GitHub repo is going to contain your <code>_redirects</code> file. In that case you would need to use a private repository instead. You could also deploy from the CLI, but than you use the CI/CD setup that Netlify shines at. If you really want a public GitHub repo than you'll need to use a serverless function and environment variable instead. (Not much work at all!)</p>
+<p><i>Header photo by <a href="https://unsplash.com/@martino_pietropoli?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Martino Pietropoli</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

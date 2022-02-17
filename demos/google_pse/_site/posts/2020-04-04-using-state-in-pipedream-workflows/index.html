@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using State in Pipedream Workflows</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using State in Pipedream Workflows</h2>
+<p>
+Written: 4/3/2020
+</p>
+
+
+<p>I've been playing a lot with <a href="https://pipedream.com/">Pipedream</a> lately and have been enjoying the heck out of it. If you didn't see it, my <a href="https://www.raymondcamden.com/2020/04/02/building-a-twitter-bot-in-pipedream">last post</a> described how to build a simple Twitter bot using the platform. Today I want to demonstrate something else with Pipedream, a feature that is pretty simple but incredibly useful - <a href="https://docs.pipedream.com/workflows/steps/code/#managing-state">managing state</a>.</p>
+<p>Many times when working with serverless functions, it would be convenient to store information. Perhaps a simple cache or even just the time the function last run. There's a huge variety of data storage systems out there with easy to use APIs, but if your needs are <em>really</em> small, then they may seem like overkill.</p>
+<p>One of my favorite features of Webtask (sigh, RIP Webtask) was that it supported a state system that let you read and write to a JavaScript object that persisted for your function. Obviously it doesn't replace something like MongoDB but for remembering a few values it was incredibly useful.</p>
+<p>Pipedream has a similar feature, but done a lot better I think. Pipedream supports a variable called <code>$checkpoint</code>. This value will persist for your workflow. It can contain anything, either a simple value (maybe you want to store only one thing) or a full JavaScript object. Anything that can be serialized can be stored. Even better, while $checkpoint is global to the entire workflow (and is most likely the option you'll use), you can even have <em>per step</em> state if you use <code>$this.checkpoint</code>.</p>
+<p>When I first <a href="https://www.raymondcamden.com/2020/03/28/a-look-at-pipedream">blogged</a> about Pipedream, I described a simple workflow that did a Twitter search, formatted the results, and emailed them to me. One issue with the workflow is that it would (possibly) keep sending the same results over and over again. The Twitter API supports returning results after a previous tweet so this should be easy to fix, and with the <code>$checkpoint</code> variable, it's easy to implement. (See my note at the bottom.)</p>
+<p>Before I describe how I did it, here's a quick refresher of how the workflow looked. In this case I'm using the nicer workflow <a href="https://twitter.com/DylanSather">Dylan Sather</a> of Pipedream had setup. It was a bit more complex, and reusable than the simpler version I did. Anyway, here are the steps:</p>
+<ol>
+<li>The first part of the workflow is a CRON trigger set to run every hour.</li>
+<li>The next part is a Node.js script that specifies a few constants.</li>
+</ol>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	// this.property exports values for use in future steps. We call these &quot;step exports&quot;:
+	// https://docs.pipedream.com/workflows/steps/#step-exports.
+	this.searchTerm = &quot;convert pdf&quot;
+}
+</code></pre>
+<ol start="3">
+<li>The third step is the search Twitter action. All I had to do there is connect my account and tell it to use the result from the previous step.</li>
+<li>The next step handled formatted the result into a string.</li>
+</ol>
+<pre><code class="language-js">async (event, steps) =&gt; {
+
+	// Format a message that contains the text of tweets returned by our search,
+	// which we'll send via email below.
+
+	// We reference step exports from previous steps here, e.g. steps.search_twitter.$return_value
+	this.message = `New ${steps.CONSTANTS.searchTerm} tweets:
+
+	${steps.search_twitter.$return_value.statuses.map(status =&gt; {
+	return `New tweet from ${status.user.screen_name}: ${status.full_text}`
+	}).join(&quot;\n\n&quot;)}
+
+}
+</code></pre>
+<ol start="5">
+<li>The final step then emailed the result of that step to me.</li>
+</ol>
+<p>So that's the workflow as it stands out - every hour (or whatever schedule, or manually if testing), search for a string, format the results, an email it. Now let's enhance it with state!</p>
+<p>First, I modified the step that defined my search string:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+
+	// this.property exports values for use in future steps. We call these &quot;step exports&quot;:
+	// https://docs.pipedream.com/workflows/steps/#step-exports.
+	this.searchTerm = &quot;@raymondcamden&quot;;
+
+	if($checkpoint &amp;&amp; $checkpoint.lastId) {
+		this.since_id = $checkpoint.lastId;
+	}
+}
+</code></pre>
+<p>My modification (ignoring the search term) is to check for $checkpoint and see if I have a <code>lastId</code> key. If so, I export <code>this.since_id</code>. Remember that values you write to the <code>this</code> scope are exported. They act like step output.</p>
+<p>I then modified the Twitter search action to add the <code>since_id</code> param.</p>
+<img src="https://static.raymondcamden.com/images/2020/04/pds1.png" alt="Action UI" class="lazyload imgborder imgcenter">
+<p>The next modification was to store a value I could use next time for step ID. I did this in the same step I format the tweets. Note, I could have done a separate step for this. Pipedream's &quot;step&quot; metaphor makes it easy to break things down as much as you want. Much like how you typically write a JavaScript function to do one thing only, you could apply the same to Pipedream too. I'm being lazy though and just keeping it simple.</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	// Format a message that contains the text of tweets returned by our search,
+	// which we'll send via email below.
+
+	if(steps.search_twitter.$return_value.statuses.length === 0 ) {
+		$end(&quot;Ending due to no statuses&quot;);
+	}
+
+	// We reference step exports from previous steps here, e.g. steps.search_twitter.$return_value
+	this.message = `New ${steps.CONSTANTS.searchTerm} tweets:
+
+	${steps.search_twitter.$return_value.statuses.map(status =&gt; {
+	return `New tweet from ${status.user.screen_name}: ${status.full_text}`
+	}).join(&quot;\n\n&quot;)}
+	`;
+
+	//remember last tweet
+	let lastId = steps.search_twitter.$return_value.statuses[0].id;
+	$checkpoint = {
+		lastId:lastId
+	};
+}
+</code></pre>
+<p>There's two mods here. One is to see if we have any tweets at all. We may not. If so, I use the cool <code>$end</code> feature to immediately end execution. When this is used, it's rendered nice in the UI too:</p>
+<img src="https://static.raymondcamden.com/images/2020/04/pds2.png" alt="Showing how $end is rendered" class="lazyload imgborder imgcenter">
+<p>Finally, I need to store the ID of the last tweet (first in the array). Notice that I'm using an object for my value. I did that for two reasons. One, I didn't realize Pipedream let you store <em>just</em> a value. Secondly, I decided I may enhance this workflow in the future and store more values. That's me pretending I'm forward thinking and smart (spoiler, I'm not).</p>
+<p>And that's it. If you want to see the full workflow, and copy it to your own account, just hop over here: <a href="https://pipedream.com/@raymondcamden/email-me-new-tweets-improved-p_LQCOlq/">https://pipedream.com/@raymondcamden/email-me-new-tweets-improved-p_LQCOlq/</a>. Thanks again to the folks at Pipedream for answering about 200 emails I sent in the last 48 hours on this and other topics!</p>
+<p>p.s. Ok, way up top I mentioned I had a note about the Twitter API. While the API is generally easy to use, I had trouble getting this exact logic right. I think I did, but I'm not 100% sure. That's not really a Pipedream concern, but I just wanted to be honest about my own uncertainty!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@martinadams?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Martin Adams</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

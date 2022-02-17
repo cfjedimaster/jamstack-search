@@ -1,0 +1,101 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Copy to the Clipboard</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Copy to the Clipboard</h2>
+<p>
+Written: 3/4/2020
+</p>
+
+
+<p>Welcome to the third of my Vue quick shots. Be sure to check out my <a href="https://www.raymondcamden.com/2020/03/02/vue-quick-shot-disabling-a-submit-button-while-waiting-for-an-ajax-call">first</a> and <a href="https://www.raymondcamden.com/2020/03/04/vue-quick-shot-using-a-loading-message">second</a> entries. I'll be posting a quick Vue.js tip every day this week (and let's pretend I was late with yesterday's entry, ok) for you to use in your projects.</p>
+<p>Today's entry is an example of how to add &quot;Copy to Clipboard&quot; functionality for a site. You see this fairly often in developer portals where keys or tokens are shared with developers for their code. A little bit of JavaScript tied to a button or some other UI is added to make it easier to copy the value. Today's tip will show one way of adding this feature.</p>
+<p>For this tip I'll be using the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Clipboard_API">Clipboard API</a>. This is a newer way of accessing the clipboard (see this <em>excellent</em> <a href="https://stackoverflow.com/questions/400212/how-do-i-copy-to-the-clipboard-in-javascript">StackOverflow post</a> for a look at other methods) that is supported in everything but Internet Explorer and Safari.</p>
+<p>Let's begin with a simple application. I've got a form with two values:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;p&gt;
+  &lt;label for=&quot;appId&quot;&gt;App ID: &lt;/label&gt;
+  &lt;input id=&quot;appId&quot; v-model=&quot;appId&quot;&gt;
+  &lt;/p&gt;
+  
+  &lt;p&gt;
+  &lt;label for=&quot;appToken&quot;&gt;App Token: &lt;/label&gt;
+  &lt;input id=&quot;appToken&quot; v-model=&quot;appToken&quot;&gt;
+  &lt;/p&gt;  
+&lt;/div&gt;
+</code></pre>
+<p>And here's the application behind it, which for now just sets values for the two fields.</p>
+<pre><code class="language-js">const app = new Vue({
+  el:'#app',
+  data: {
+    appId:'3493993048904',
+    appToken:'dksklq33lkj21kjl12lkdsasd21jk'
+  }
+})
+</code></pre>
+<p>Alright, so how can we add a way to copy those values to the clipboard? I'm going to use a simple button that looks like so:</p>
+<pre><code class="language-html">&lt;button v-if=&quot;canCopy&quot; @click=&quot;copy(something)&quot;&gt;Copy&lt;/button&gt;
+</code></pre>
+<p>The <code>v-if</code> portion will handle hiding or showing the button based on if the browser supports the API. The <code>click</code> handler will pass the value to be copied. I can add it to the HTML like so:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;p&gt;
+  &lt;label for=&quot;appId&quot;&gt;App ID: &lt;/label&gt;
+  &lt;input id=&quot;appId&quot; v-model=&quot;appId&quot;&gt;
+  &lt;button v-if=&quot;canCopy&quot; @click=&quot;copy(appId)&quot;&gt;Copy&lt;/button&gt;
+  &lt;/p&gt;
+  
+  &lt;p&gt;
+  &lt;label for=&quot;appToken&quot;&gt;App Token: &lt;/label&gt;
+  &lt;input id=&quot;appToken&quot; v-model=&quot;appToken&quot;&gt;
+  &lt;button v-if=&quot;canCopy&quot; @click=&quot;copy(appToken)&quot;&gt;Copy&lt;/button&gt;
+  &lt;/p&gt;  
+&lt;/div&gt;
+</code></pre>
+<p>Now let's look at the JavaScript:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data: {
+    appId:'3493993048904',
+    appToken:'dksklq33lkj21kjl12lkdsasd21jk',
+    canCopy:false
+  },
+  created() {
+    this.canCopy = !!navigator.clipboard;
+  },
+  methods: {
+    async copy(s) {
+      await navigator.clipboard.writeText(s);
+      alert('Copied!');
+    }
+  }
+})
+</code></pre>
+<p>I first added a boolean value for <code>canCopy</code> that will handle the toggle for showing the buttons. I then use <code>created</code> to check if the API exists. Finally I added the <code>copy</code> method. The <code>clipboard</code> API is an asynchronous one so I wait for it to finish and then alert the user. Let me just say that I am <em>not</em> a fan of using <code>alert</code> like this. The API runs so darn quick I think you could skip this part completely, but technically it's possible someone could click and try to paste at lightning speed and not get what they expect. I also think you could do the notification a bit nicer than the alert. You could add some text by the button or someplace else in the UI. Many UI frameworks support a &quot;toast&quot; event that will show a message that automatically dismisses. That would be a great option as well.</p>
+<p>You can test this out yourself here:</p>
+<p class="codepen" data-height="400" data-theme-id="default" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="rNVGeXa" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue Copy to Clipboard">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/rNVGeXa">
+  Vue Copy to Clipboard</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>So before I wrap this quick tip, let me point out this functionality could be done a bit nicer as a component or custom directive. If anyone wants to do this and share it in the comments below, please do!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

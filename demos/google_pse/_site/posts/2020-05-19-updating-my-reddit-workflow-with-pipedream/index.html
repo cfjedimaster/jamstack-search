@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Updating my Reddit Workflow with Pipedream</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Updating my Reddit Workflow with Pipedream</h2>
+<p>
+Written: 5/18/2020
+</p>
+
+
+<p>This was originally just going to be a tweet, but then I realized I wanted a bit more space to talk about it and figured I'd write it up as a post. And since this is my blog and I can do what I want to, you get to enjoy this little nugget of information.</p>
+<p>Back almost exactly a month ago, I <a href="https://www.raymondcamden.com/2020/04/20/building-a-reddit-workflow-with-pipedream">blogged</a> about using Pipedream to build a Reddit email report. The idea was that I wanted a daily email of posts from my subscribed subreddits for the past 24 hours of content. The implementation was a bit complex. I used one workflow to handle &quot;get a days worth of content from subreddit&quot; as a general &quot;API&quot; and another workflow connected to my authentication. It handles getting my subscriptions, hitting the API, and then generating the email. Here's an example of how that looked:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit10.png" alt="Email report" class="lazyload imgborder imgcenter">
+</p>
+<p>This worked well, but after a while of actually <em>getting</em> the email, I noticed some problems. The email takes all of the posts from all of my subscriptions and sorts them together. I thought this made sense to me, but I noticed it made it harder to actually read the content. Sometimes I don't care about a subreddit and mentally it just felt weird going from the movies subreddit to the Acadiana one. Also, some subreddits get a <strong>huge</strong> amount of traffic in a day. The email was hard to read and just too long.</p>
+<p>So I decided to fix that. I didn't want to edit my original workflow because I wanted it to still be a reference for the older post. Luckily Pipedream makes that simple. I turned off the CRON schedule on the workflow and just used the copy command.</p>
+<p>Next, I edited the Node.js code step that combines and sorts my data. This:</p>
+<pre><code class="language-js">for(let i=0;i&lt;result.length;i++) {
+	this.posts = this.posts.concat(result[i].data.result);
+}
+
+this.posts.sort((a,b) =&gt; {
+	if(a.created_utc &lt; b.created_utc) return 1;
+	if(a.created_utc &gt;b.created_utc) return -1;
+	return 0;
+});
+</code></pre>
+<p>Became this:</p>
+<pre><code class="language-js">for(let i=0;i&lt;result.length;i++) {
+  this.posts = this.posts.concat(result[i].data.result.slice(0,10));
+}
+</code></pre>
+<p>No more sorting together and I'm only getting the first ten entries from each subreddit. (Those posts should be date sorted already. Should be.)</p>
+<p>Then I modified the step that formats the email. I added in code to notice when a new subreddit start and added HTML to make it more visibly separated.</p>
+<pre><code class="language-js">let dotLeft = function(s, len) {
+  if(s.length &lt; len) return s;
+  return s.substring(0, len)+'...';
+};
+
+let lastSub = '';
+
+this.subject = `Daily Reddit Report`;
+this.body = `
+&lt;h1&gt;Daily New Posts for Your Reddit Subscriptions&lt;/h1&gt;
+&lt;p/&gt;
+`;
+steps.get_and_sort.posts.forEach(p =&gt; {
+  // only show thumbnails when they aren't &quot;self&quot;,&quot;default&quot;,&quot;nswf&quot; - or more broadly, not a url
+  if(p.thumbnail.indexOf('http') === -1) delete p.thumbnail;
+  let text = '';
+  if(p.is_self) text = dotLeft(p.selftext,200);
+  if(p.subreddit !== lastSub) {
+    this.body += `&lt;hr/&gt;&lt;h2&gt;${p.subreddit}&lt;/h2&gt;`;
+    lastSub = p.subreddit;
+  }
+  this.body += `
+&lt;p&gt;
+${ p.thumbnail ? '&lt;img src=&quot;'+p.thumbnail+'&quot; align=&quot;left&quot; style=&quot;margin-right:10px&quot;&gt;':''}
+&lt;b&gt;Title: ${p.title}&lt;/b&gt;&lt;br/&gt;
+URL: &lt;a href=&quot;${p.url}&quot;&gt;${p.url}&lt;/a&gt;&lt;br/&gt;
+Reddit URL: &lt;a href=&quot;https://www.reddit.com${p.permalink}&quot;&gt;https://www.reddit.com${p.permalink}&lt;/a&gt;&lt;br/&gt;
+Author: ${p.author}&lt;br/&gt;
+&lt;br clear=&quot;left&quot;&gt;
+${text}
+&lt;/p&gt;  
+  `
+});
+</code></pre>
+<p>Basically - notice when the subreddit changes and add a horizontal rule and header. Also notice I modified my code on when to show images. This seems to work much better.</p>
+<p>And that's it. My new workflow may be found here: <a href="https://pipedream.com/@raymondcamden/daily-reddit-posts-3-p_PAC9DV/edit?e=1c8nZNETuFxToNCya2eVCafjVAu">https://pipedream.com/@raymondcamden/daily-reddit-posts-3-p_PAC9DV/edit?e=1c8nZNETuFxToNCya2eVCafjVAu</a> I'm trying my best to make good use of the <a href="https://pipedream.com/@raymondcamden/daily-reddit-posts-3-p_PAC9DV/readme">Readme</a> feature to document what I've done.</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

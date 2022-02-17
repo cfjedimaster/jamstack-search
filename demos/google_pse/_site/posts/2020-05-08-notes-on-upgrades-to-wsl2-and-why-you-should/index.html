@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Notes on Upgrades to WSL2 (And Why You Should)</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Notes on Upgrades to WSL2 (And Why You Should)</h2>
+<p>
+Written: 5/7/2020
+</p>
+
+
+<p>For a few years now (well, it feels like many years), I've been singing the praises of WSL - Windows Subsystem for Linux. It's one of the biggest reasons I switched to Windows after years on OSX. (Not the only reason, but you don't want to hear me rant about Apple.) The only real issue with WSL was the slowness of file operations. There were technical reasons for this of course, but honestly it only really bugged me when doing npm operations.</p>
+<p>As you know, running <code>npm i something</code> tends to fetch an incredible amount of files. In my completely unscientific testing, I'd say these operations were 2-5X slower in WSL than in the native Windows shell. Another command that would be slow at times was <code>git status</code>. Outside of that though it was just fine. I'm no command line jedi but I definitely preferred the Unix shell to cmd.exe or Powershell.</p>
+<p>A while back Microsoft announced a major rework of WSL. You can look up the technical details if you want, but after going through the process of upgrading to WSL2 on two machines now, I can say that I'm absolutely blown away by the speed improvements.</p>
+<p>With that in mind, I wanted to share a few tips on the process and how it impacted my development. This isn't meant to be an introduction to WSL or a complete guide to using it, just what I encountered and what I changed in the process. I had some great help from Microsoft folks on Twitter so I definitely encourage you reaching out if you run into issues as well.</p>
+<p>Alright, so start off by going to the <a href="https://docs.microsoft.com/en-us/windows/wsl/wsl2-install">WSL2 Install</a> guide. You'll note that you need Windows version 18917 or higher in order to use WSL2. I'm currently on the Insider Slow Ring at version 19041.208. Insider Slow Ring gives you earlier access to new Windows features and at least for me has been really stable. If you don't know what version of Windows you're on, just run winver.exe, which by the way you can do from WSL.</p>
+<p>As part of the install process, they document how to check your WSL installs. You can do this by running <code>wsl -l -v</code>:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl1.png" alt="wsl cli example" class="lazyload imgborder imgcenter">
+</p>
+<p>To update, you simply run <code>wsl --set-version Ubuntu 2</code> where <code>Ubuntu</code> is the name of your distro and may be different. You may get prompted to install stuff first:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl2.png" alt="Warning to install stuff" class="lazyload imgborder imgcenter">
+</p>
+<p>I followed the directions there which basically had you copy and paste stuff into Powershell (be sure to run Powershell as an Administrator). I then ran the command again and got:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl3.png" alt="Even more stuff" class="lazyload imgborder imgcenter">
+</p>
+<p>Once again, follow the link, do the install, and you should be good. One one machine I had to tweak my BIOS, but on the other the install was good enough.</p>
+<p>Now if you run the update command again, you should hopefully get:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl4.png" alt="Final update" class="lazyload imgborder imgcenter">
+</p>
+<p>On my fancy new laptop, this was rather quick, unfortunately I don't remember how long. On my older desktop, this was <em>not</em> quick. I think it took maybe 30 minutes. When done though you can quickly confirm it's been updated:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl5.png" alt="Confirm WSL version" class="lazyload imgborder imgcenter">
+</p>
+<p>You can also make WSL2 the default by doing this: <code>wsl --set-default-version 2</code>. I only run one distro on my machine so this really isn't an issue for me.</p>
+<p>Ok, done! But wait, there's some very important things to note. I did some immediate testing the first time I did an update and noticed that npm was <em>not</em> faster. I was disappointed, reached out on Twitter, and was reminded that if I'm still using the main Windows filesystem (<code>/mnt/c</code>), file IO is still going to be slow. I did some testing under <code>~/</code> and right away saw a huge boost. I typically do all my work in <code>/mnt/c/projects</code>, but simply set up <code>~/projects</code> as my new place to do crap.</p>
+<p>This then quickly led to an issue - how do I edit files there? I've got two answers to that.</p>
+<p>First, you can browse your distro file system in Explorer.exe by going to <code>\\wsl$</code>:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl6.png" alt="WSL support in Explorer" class="lazyload imgborder imgcenter">
+</p>
+<p>You'll see your distros there and can work with your file system. In my testing, I've noticed that when I copy files over to Ubuntu, I <em>sometimes</em> get a copy with &quot;:Zone.Identifier&quot; in it. This is known and I believe has something to do with AV stuff. You can read more about it here: <a href="https://github.com/microsoft/WSL/issues/4609">Zone.Identifier Files when copying from Windows to WSL filestructure</a>. For now I'm just deleting when I see them, typically before I do a git commit.</p>
+<p>Also, I believe I read that WSL is going to be more tightly integrated into Explorer in the future. So there's that.</p>
+<p>The next thing was getting support for Visual Studio Code. This was also pretty easy if you add the <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl">Remote-WSL</a> extension.</p>
+<p>You add that extension, then run &quot;Remote-WSL: New Window&quot;. This will open a new window and do a one time download of support stuff. For me it took about 2 minutes I think. When done, you'll have nothing in the file explorer - at first:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl7.png" alt="VSC File Explorer under WSL" class="lazyload imgborder imgcenter">
+</p>
+<p>Note that it says &quot;Connected to remote&quot; and it has a &quot;WSL:Ubuntu&quot; marker on the lower left corner. Clicking to open a folder will bring up UI on top to browse:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl8.png" alt="File open UI" class="lazyload imgborder imgcenter">
+</p>
+<p>This was a bit weird to me at first, but once you select a folder, everything returns to normal. So here's a screen shot of my editor right now. You can see the &quot;WSL&quot; marks so I know it's in the Ubuntu file system, but outside of that, everything is &quot;normal&quot;:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/wsl9.png" alt="File UI" class="lazyload imgborder imgcenter">
+</p>
+<p>But wait - there's one more nit. I was testing with a Vue project and noticed I had &quot;lost&quot; <code>.vue</code> file support. Turns out you may have to reinstall some extensions. Basically if an extension does anything UI wise, like color schemes, it will work. Other extensions have to be installed again.</p>
+<p>This - and more - is all documented here: <a href="https://code.visualstudio.com/docs/remote/wsl">Developing in WSL</a>. Honestly once I realized what was going on I didn't worry about it. VSCode makes it super easy to install extensions.</p>
+<p>So far, that's it. I absolutely recommend upgrading, but as always, do with caution. Everything I'm doing under WSL is Git-based so I could completely lose everything and not really be impacted. Enjoy!</p>
+<p>Oh, as a quick note, I strongly suggest you try out the new <a href="https://github.com/microsoft/terminal">Windows Terminal</a>. It's highly configurable, open source, and works great!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@chris_reyem?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Chris Reyem</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

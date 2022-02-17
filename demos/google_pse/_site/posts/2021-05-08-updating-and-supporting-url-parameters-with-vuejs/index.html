@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Updating (and Supporting) URL Parameters with Vue.js</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Updating (and Supporting) URL Parameters with Vue.js</h2>
+<p>
+Written: 5/8/2021
+</p>
+
+
+<p>Today's article is something that's been kicking around in my head for a few months now, and seeing a recent article (<a href="https://www.amitmerchant.com/update-url-query-parameters-as-you-type-in-the-input-using-javascript/">Update URL query parameters as you type in the input using JavaScript</a>) encouraged me to finally get around to writing it. The basic idea is to make it easier for a person to share or bookmark the current state of an application. Let's start with a basic example.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/05/vu1.jpg" alt="Demo layout of application, list of items with filters" class="lazyload imgborder imgcenter">
+</p>
+<p>There's a list of items which consist of people, cats, and a dog. Each item has a name and type. On top there are filters for the name and type. If you enter any text, the items that match the name (ignoring case) will be shown. If you select one or more of the types, only those matching will be shown.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/05/vu2.jpg" alt="Items filtered by name and type" class="lazyload imgborder imgcenter">
+</p>
+<p>Let's look at the code. First the HTML:</p>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+	&lt;h2&gt;Items&lt;/h2&gt;
+
+	&lt;p&gt;
+	&lt;input type=&quot;search&quot; placeholder=&quot;Filter by name&quot; v-model=&quot;filter&quot;&gt; 
+	&lt;input type=&quot;checkbox&quot; value=&quot;person&quot; id=&quot;personType&quot; v-model=&quot;typeFilter&quot;&gt; 
+	&lt;label for=&quot;personType&quot;&gt;Only People&lt;/label&gt;
+	
+	&lt;input type=&quot;checkbox&quot; value=&quot;cat&quot; id=&quot;catType&quot; v-model=&quot;typeFilter&quot;&gt; 
+	&lt;label for=&quot;catType&quot;&gt;Only Cats&lt;/label&gt;
+
+	&lt;input type=&quot;checkbox&quot; value=&quot;dog&quot; id=&quot;dogType&quot; v-model=&quot;typeFilter&quot;&gt; 
+	&lt;label for=&quot;dogType&quot;&gt;Only Dogs&lt;/label&gt;
+	&lt;/p&gt;
+
+	&lt;ul&gt;
+	
+		&lt;li v-for=&quot;item in items&quot;&gt;{{ item.name }} ({{item.type }})&lt;/li&gt;
+	
+	&lt;/ul&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/vue/dist/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;vue_url.js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>And here's the JavaScript.</p>
+<pre><code class="language-js">// hard coded for simplicity...
+const ITEMS = [
+	{ name: &quot;Ray&quot;, type: &quot;person&quot; },
+	{ name: &quot;Lindy&quot;, type: &quot;person&quot; },
+	{ name: &quot;Jacob&quot;, type: &quot;person&quot; },
+	{ name: &quot;Lynn&quot;, type: &quot;person&quot; },
+	{ name: &quot;Noah&quot;, type: &quot;person&quot; },
+	{ name: &quot;Jane&quot;, type: &quot;person&quot; },
+	{ name: &quot;Maisie&quot;, type: &quot;person&quot; },
+	{ name: &quot;Carol&quot;, type: &quot;person&quot; },
+	{ name: &quot;Ashton&quot;, type: &quot;person&quot; },
+	{ name: &quot;Weston&quot;, type: &quot;person&quot; },
+	{ name: &quot;Sammy&quot;, type: &quot;cat&quot; },
+	{ name: &quot;Aleese&quot;, type: &quot;cat&quot; },
+	{ name: &quot;Luna&quot;, type: &quot;cat&quot; },
+	{ name: &quot;Pig&quot;, type: &quot;cat&quot; },
+	{ name: &quot;Cayenne&quot;, type: &quot;dog&quot; }
+]
+
+const app = new Vue({
+	el:'#app',
+	data: {
+		allItems: ITEMS,
+		filter:'',
+		typeFilter:[]
+	},
+	computed: {
+		items() {
+			return this.allItems.filter(a =&gt; {
+				if(this.filter !== '' &amp;&amp; a.name.toLowerCase().indexOf(this.filter.toLowerCase()) === -1) return false;
+				if(this.typeFilter.length &amp;&amp; !this.typeFilter.includes(a.type)) return false;
+				return true;
+			});
+		}
+	}
+});
+</code></pre>
+<p>As you can see, the items referenced in HTML comes from the 'raw' data, <code>allItems</code>, and is filtered in a computed property. Here's a CodePen if you want to see it in action.</p>
+<p class="codepen" data-height="500" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="gOmpPmg" style="height: 500px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue Blog Post about URL Params">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/gOmpPmg">
+  Vue Blog Post about URL Params</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://cpwebassets.codepen.io/assets/embed/ei.js"></script>
+<p>Alright, so that's the application in it's initial state. Now imagine you've filtered the data, like the results, and want to bookmark it, or share it? To do that we need to do two things:</p>
+<ul>
+<li>When you filter, in any way, change the URL in a way that doesn't reload the page</li>
+<li>When you request the page, check the URL for query params and default our filters</li>
+</ul>
+<p>Let's tackle the second one first:</p>
+<pre><code class="language-js">created() {
+	let qp = new URLSearchParams(window.location.search);
+	let f = qp.get('filter');
+	if(f) this.filter = qp.get('filter');
+	let tf = qp.get('typeFilter');
+	if(tf) this.typeFilter = tf.split(',');
+},
+</code></pre>
+<p>I make use of the <code>created</code> event to look at the current URL query parameters. If I have a value for filter, I can simply pass it use it as is in <code>this.filter</code>. For <code>typeFilter</code>, it will be an array of values which in a query string will be comma delimited. So if it exists, I turn it into an array using <code>split</code>. I could test this by manually changing the URL, htting enter, and seeing the page load with the right values.</p>
+<p>Now we need to handle updating the URL when you filter. While Vue supports a <code>watchers</code> feature, it only lets you associate a handler with one variable at a time, which means I'd need a watcher for both <code>filter</code> an <code>typeFilter</code>. Vue 3 fixes this. (See more on this <a href="https://stackoverflow.com/questions/42737034/vue-js-watch-multiple-properties-with-single-handler">here</a>.)</p>
+<p>As my application was using a computed value that already executed when either of my filters updated, I added a call to a new function there:</p>
+<pre><code class="language-js">computed: {
+	items() {
+		this.updateURL();
+		return this.allItems.filter(a =&gt; {
+			if(this.filter !== '' &amp;&amp; a.name.toLowerCase().indexOf(this.filter.toLowerCase()) === -1) return false;
+			if(this.typeFilter.length &amp;&amp; !this.typeFilter.includes(a.type)) return false;
+			return true;
+		});
+	}
+},
+</code></pre>
+<p>And here is <code>updateURL</code>:</p>
+<pre><code class="language-js">updateURL() {
+	let qp = new URLSearchParams();
+	if(this.filter !== '') qp.set('filter', this.filter);
+	if(this.typeFilter.length) qp.set('typeFilter', this.typeFilter);
+	history.replaceState(null, null, &quot;?&quot;+qp.toString());
+}
+</code></pre>
+<p>I create new, blank URL params and build it up based on the values of my filter. I then use <code>history.replaceState</code> to update the URL without actually reloading the page. Unforunately I can't show this on CodePen as it doesn't let you change the URL, but I have the complete code up on <a href="https://codepen.io/cfjedimaster/pen/KKWpVqe">this pen</a>. I put a demo here if you want to kick the tires a bit:</p>
+<p><a href="https://cfjedimaster.github.io/vue-demos/urlthing/vue_url.html?">https://cfjedimaster.github.io/vue-demos/urlthing/vue_url.html?</a></p>
+<p>And here's an example with some filters:</p>
+<p><a href="https://cfjedimaster.github.io/vue-demos/urlthing/vue_url.html?filter=a&amp;typeFilter=cat">https://cfjedimaster.github.io/vue-demos/urlthing/vue_url.html?filter=a&amp;typeFilter=cat</a></p>
+<p>Photo by <a href="https://unsplash.com/@srkraakmo?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Stephen Kraakmo</a> on <a href="https://unsplash.com/s/photos/filter?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

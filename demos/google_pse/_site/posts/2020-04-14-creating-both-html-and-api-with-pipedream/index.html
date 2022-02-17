@@ -1,0 +1,167 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Creating Both HTML and API with Pipedream</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Creating Both HTML and API with Pipedream</h2>
+<p>
+Written: 4/13/2020
+</p>
+
+
+<p>First off, I apologize up front about the title. You don't &quot;Create API&quot;, you create &quot;an API&quot;. No one cares probably but it's bugging me and I can't think of a better alternative. Hopefully I will before I finish the post. (Spoiler, he didn't.) Yesterday I was hanging out in the <a href="https://pipedream.com/community">Pipedream Slack</a> when I asked the team how a person would support running both an API  on Pipedream as well as the HTML in front of it.</p>
+<p>So imagine you've built an incredibly complex API to do, well, who cares. To do something. Doesn't matter but here's my workflow as an API: <a href="https://enk542004vp3drh.m.pipedream.net/?name=ray">https://enk542004vp3drh.m.pipedream.net/?name=ray</a> Change the <code>name</code> value and your response changes.</p>
+<p>Now imagine you want to host an HTML application that makes use of this API. You've got a few options. What follows is a mix of suggestions from Dylan Sather of Pipedream and my own demo code and such.</p>
+<ol>
+<li>Use a &quot;real&quot; hosting provider. Pipedream can absolutely host HTML (see the next suggestion), but if you are building a &quot;site&quot;, you really want to use a service optimized for that, like Netlify and Zeit. Your endpoints have CORS enabled automatically so you can easily hit it from there. I wrote up a quick Vue.js application to demo this:</li>
+</ol>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;&lt;/head&gt;
+
+&lt;body&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+&lt;p&gt;
+&lt;input v-model=&quot;name&quot;&gt; &lt;button @click=&quot;sendToAPI&quot;&gt;Process&lt;/button&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+Result: 
+&lt;/p&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/vue/dist/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+const app = new Vue({
+	el:'#app',
+	data: {
+		name:'',
+		result:''
+	},
+	methods: {
+		async sendToAPI() {
+			let resp = await fetch(`https://enk542004vp3drh.m.pipedream.net/?name=${this.name}`);
+			let data = await resp.json();
+			this.result = data.response;
+		}
+	}
+
+});
+
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>All this does is call the Pipedream hosted API with input and render it. I then deployed it to Zeit: <a href="https://temp-pearl.now.sh/temp.html">https://temp-pearl.now.sh/temp.html</a>.</p>
+<p>That works just fine.</p>
+<ol start="2">
+<li>Host the HTML with Pipedream. Pipedream workflows can return HTML, even dynamic HTML. Consider this <a href="https://pipedream.com/@dylburger/respond-with-html-p_V9C2Kp/edit">workflow</a>:</li>
+</ol>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	// Print &quot;Hi there&quot; in the absence of a name
+	const { name } = event.query || &quot;there&quot;
+
+	// See https://docs.pipedream.com/workflows/steps/triggers/#http-responses
+	$respond({
+		status: 200,
+		headers: {
+			&quot;Content-Type&quot;: &quot;text/html; charset=UTF-8&quot;
+		},
+		body: `&lt;html&gt;&lt;h1&gt;Hi, ${name}&lt;/html&gt;`,
+	}) 
+}
+</code></pre>
+<p>As you can see, it inspects the query string to look for a value. It then returns HTML in a template string to return dynamic HTML. (If you're old enough to remember DHTML, it's time for AARP. ;) So we could build a workflow to spit out the HTML I used above:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	let html = `
+	&lt;html&gt;
+	&lt;head&gt;&lt;/head&gt;
+	EVERYTHING FROM ABOVE WAS HERE
+	&lt;/body&gt;
+	&lt;/html&gt;
+	`;
+	$respond({
+	status: 200,
+	headers: {
+		&quot;Content-Type&quot;: &quot;text/html; charset=UTF-8&quot;
+	},
+	body: html,
+	}) 
+
+}
+</code></pre>
+<p>To keep the code listing a bit short I didn't copy the entire string, but you get the idea. Do remember though that if your JavaScript template string itself contains template strings, you need to escape it. I totally knew that. Honest. I deployed this and you can see it here: <a href="https://enxfb1rcr2bvdsk.m.pipedream.net/">https://enxfb1rcr2bvdsk.m.pipedream.net/</a></p>
+<p>This works, but honestly feels a bit wasteful.</p>
+<ol start="3">
+<li>Support both HTML and data in one workflow. A final option to consider is having one workflow support both the HTML as well as the data itself. Your workflow code has access to the entire HTTP request. You've already seen me use the query string, but you can also check the path (/foo) as well as any request headers and form data. So in theory you could do something like, &quot;if the request content type is for html, return it, if it's for json, return data&quot;.</li>
+</ol>
+<p>This <a href="https://pipedream.com/@dylburger/generate-an-rss-feed-from-http-post-requests-retrieve-via-get-request-p_n1CrQG/edit">workflow</a> shows an example where if a request is POST, data is added, and if it's GET, HTML is returned. We can build our own version that has these steps:</p>
+<ul>
+<li>Start with an HTML trigger to give us a URL</li>
+<li>If method is GET, return the HTML string.</li>
+<li>If method is POST, assume it's an API call.</li>
+</ul>
+<p>I built a <a href="https://pipedream.com/@raymondcamden/html-api-demo-p_RRCdjB/edit">workflow</a> that does this. It has 3 steps, with the first one just being the HTTP trigger. The second step handles GET:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	if(event.method === 'GET') {
+		let html = `
+		DELETED STUFF....
+
+				async sendToAPI() {
+					let resp = await fetch(&quot;${event.url}&quot;, {
+						method:&quot;post&quot;,
+						body: JSON.stringify({name:this.name})
+					});
+					let data = await resp.json();
+					this.result = data.response;
+				}
+			}
+
+		});
+
+		`;
+		$respond({
+			status: 200,
+			headers: {
+			&quot;Content-Type&quot;: &quot;text/html; charset=UTF-8&quot;
+			},
+			body: html,
+		});
+		$end();   
+	}
+}
+</code></pre>
+<p>I'm not a big fan of &quot;surround the entire body with an IF thing&quot; but it gets the job done. Also note that in my HTML (which I trimmed a bit), I switch my URL to <code>${event.url}</code> so I can dynamically pick up the current workflow URL.</p>
+<p>The next step handles the POST:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	if(event.method === 'POST') {
+		let name = 'Nameless';
+		if(event.body.name) name = event.body.name;
+		$respond({
+			headers: {
+				&quot;Content-Type&quot;:&quot;application/json&quot;
+			},
+			body: {&quot;response&quot;:`Hello ${name}`}
+		});
+	}
+}
+</code></pre>
+<p>It's virtually equal to my initial logic (which I don't ever shared) except it now looks for POST data instead of a query string value. I encourage you to check out the <a href="https://pipedream.com/@raymondcamden/html-api-demo-p_RRCdjB/edit">workflow</a> for the complete code. You can run the demo here: <a href="https://enek3dg6pwsn2od.m.pipedream.net/">https://enek3dg6pwsn2od.m.pipedream.net/</a></p>
+<h3>My Recommendation</h3>
+<p>Ok, so this was mostly me just playing around with Pipedream and seeing what I <em>could</em> do. Honestly while you can serve HTML with Pipedream, I'd more often than not use a &quot;proper&quot; HTML serving platform like Zeit or Netlify. It's cool that Pipedream is flexible enough to handle this though!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

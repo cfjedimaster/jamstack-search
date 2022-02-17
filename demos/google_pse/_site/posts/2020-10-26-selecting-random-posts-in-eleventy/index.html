@@ -1,0 +1,166 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Selecting Random Posts in Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Selecting Random Posts in Eleventy</h2>
+<p>
+Written: 10/25/2020
+</p>
+
+
+<p>This is something that's been kicking around in my head for a few weeks and I finally found some time to build a demo of what I was thinking about. When working with a blog in Eleventy, what if you could direct folks to other blog posts once they've finished reading one? In this post, I'll demonstrate three different ways to link to random(ish) other posts in an Eleventy blog.</p>
+<p>Alright, so let's look at the site before adding in the randomness. My Eleventy blog consists of a subdirectory of posts. This directory contains each blog post. Here's a sample one, alpha.md:</p>
+<pre><code class="language-html">---
+layout: post
+title: Alpha Post
+tags: posts
+date: 2020-10-01 12:00:00
+---
+
+This is the Alpha post.
+</code></pre>
+<p>I've got four posts total with each post using similar content. My home page renders the posts, newest to oldest:</p>
+<pre><code class="language-html">---
+title: Home Page for Blog
+layout: layout
+---
+
+&lt;h2&gt;Blog Demo&lt;/h2&gt;
+
+&lt;p&gt;
+This folder is meant to be used as a basic blog that I will copy to use in &lt;i&gt;other&lt;/i&gt; demos.
+&lt;/p&gt;
+
+&lt;h2&gt;Posts&lt;/h2&gt;
+
+&lt;ul&gt;
+{% for post in collections.posts reversed %}
+  &lt;li&gt;&lt;a href=&quot;{{post.url}}&quot;&gt;{{ post.data.title }}&lt;/a&gt; ({{ post.date | dtFormat }})&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>Not that it's relevant, but my <code>dtFormat</code> filter makes use of Intl support in Node.js. Here's the relevant function in my <code>.eleventy.js</code> file:</p>
+<pre><code class="language-js">const english = new Intl.DateTimeFormat('en');
+
+eleventyConfig.addFilter(&quot;dtFormat&quot;, function(date) {
+	return english.format(date);
+});
+</code></pre>
+<p>That could be a lot fancier, but I love how it nice and simple. Now, let's look at the <code>post</code> layout:</p>
+<pre><code class="language-html">---
+layout: layout
+---
+
+&lt;h2&gt;{{ title }}&lt;/h2&gt;
+&lt;p&gt;&lt;i&gt;Published {{ date | dtFormat }}&lt;/i&gt;&lt;/p&gt;
+
+{{ content }}
+
+&lt;p&gt;
+&lt;hr/&gt;
+&lt;/p&gt;
+
+{% assign randomPost = collections.posts | getRandom %}
+&lt;p&gt;
+You may also enjoy: &lt;a href=&quot;{{randomPost.url}}&quot;&gt;{{ randomPost.data.title }}&lt;/a&gt;
+&lt;/p&gt;
+
+</code></pre>
+<p>The top half of the post just renders the title, date, and content of the post. The bottom is where I include a link to another random post. Let's look at that filter:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getRandom&quot;, function(items) {
+	let selected = items[Math.floor(Math.random() * items.length)];
+	return selected;
+});
+</code></pre>
+<p>Nice and simple. It could be even shorter, I don't need to have two lines, but I kept it like that as I knew I was going to build better versions. Here's an example of how this renders:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/10/r1.jpg" alt="Blog post with random link at the bottom" class="lazyload imgborder imgcenter">
+</p>
+<p>Cool! Except that it's entirely possible that the random post selected would be the same as the current one. Especially while the blog is just starting and only has a few entries. So I then created a new filter, <code>getRandom2</code>. This one expects the current page as an argument. Here's how I called it in the template:</p>
+<pre><code class="language-html">{% assign randomPost = collections.posts | getRandom2: page %}
+&lt;p&gt;
+You may also enjoy (avoid same url): &lt;a href=&quot;{{randomPost.url}}&quot;&gt;{{ randomPost.data.title }}&lt;/a&gt;
+&lt;/p&gt;
+</code></pre>
+<p>And here's the filter:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getRandom2&quot;, function(items,avoid) {
+	/*
+	this filter assumes items are pages
+	we need to loop until we don't pick avoid, 
+	*/
+	if(!items.length || items.length &lt; 2) return;
+	
+	let selected = items[Math.floor(Math.random() * items.length)];
+	while(selected.url === avoid.url) {
+		selected = items[Math.floor(Math.random() * items.length)];
+	}
+	return selected;
+});
+</code></pre>
+<p>First, I ensure that I have at least two or more items. If I have one, or zero (which doesn't make sense as I'm calling it from a blog post, but whatever), then I return nothing. To get my random post that isn't my current post, I select a random one and loop until it's url does not match the current page's url. A while loop may not be best here. I could have made a new array with the current item filtered out and then selected randomly from there. As always - multiple ways to skin the cat.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/10/r2.jpg" alt="Skin the cat?!?!?" class="lazyload imgborder imgcenter">
+</p>
+<p>I was going to wrap it up here, but then I thought of yet another version. While random selections are fine, it would be cool to perhaps select a random post in the same category. My sample post above didn't have categories, so for each post I added one:</p>
+<pre><code class="language-html">---
+layout: post
+title: Alpha Post
+tags: posts
+date: 2020-10-01 12:00:00
+categories: sports
+---
+</code></pre>
+<p>My sample blog has four posts. For three of them I used a value of <code>sports</code> and the last one used <code>music</code>. Now I want logic that follows this logic:</p>
+<ul>
+<li>If my category has 2 or more items, select one from that list and still bypass the current post.</li>
+<li>If I'm a category of one, select a random from all the rest, again ignoring the current post.</li>
+</ul>
+<p>I added yet another link to my template (which you would't do on a real site, you would just use one):</p>
+<pre><code class="language-html">{% assign randomPost = collections.posts | getRandom3: page, categories %}
+&lt;p&gt;
+You may also enjoy (try same category, not same url): &lt;a href=&quot;{{randomPost.url}}&quot;&gt;{{ randomPost.data.title }}&lt;/a&gt;
+&lt;/p&gt;
+
+</code></pre>
+<p>Note I'm now passing two arguments to a filter - both the current page as well as the current categories value. A quick note - I'm using the plural &quot;categories&quot;, but for this demo I'm assuming only one category per post. So here's the filter:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getRandom3&quot;, function(items,avoid,category) {
+	/*
+	this filter tries to match to categories
+	*/
+	if(!items.length || items.length &lt; 2) return;
+
+	let myItems = items.filter(i =&gt; {
+		return (i.data.categories === category) &amp;&amp; (i.url !== avoid.url);
+	});
+
+	if(myItems.length === 0) {
+		myItems = items.filter(i =&gt; {
+			return i.url !== avoid.url;
+		});
+	}
+
+	if(myItems.length === 0) return;
+	return myItems[Math.floor(Math.random() * myItems.length)];
+});
+</code></pre>
+<p>The filter begins by creating a new list of posts that filters out posts that don't match the category or have the same URL. If that list is blank, we create another list of posts that don't have the same URL. We do a final check to ensure we've got <em>something</em> left, and if so, return a random item.</p>
+<p>If you find this interesting, you can check out the repository here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/randompost">https://github.com/cfjedimaster/eleventy-demos/tree/master/randompost</a>. I also created a very simple &quot;blog&quot; project that I used as a seed for this demo. I'm not sure if that's going to be useful but you can find that here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/basicblog">https://github.com/cfjedimaster/eleventy-demos/tree/master/basicblog</a></p>
+<p>Finally, if you want to see an example of the output - you can do so here: <a href="https://eleventyrandom.vercel.app/">https://eleventyrandom.vercel.app/</a> Obviously it isn't random in the built version, but every time a new post is added and the site is rebuilt, the links would change completely. Let me know what you think by leaving me a comment below!</p>
+<p><span>Photo by <a href="https://unsplash.com/@brett_jordan?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Brett Jordan</a> on <a href="https://unsplash.com/s/photos/random?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

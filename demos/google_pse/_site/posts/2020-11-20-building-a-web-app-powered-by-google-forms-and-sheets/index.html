@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Building a Web App Powered by Google Forms and Sheets</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Building a Web App Powered by Google Forms and Sheets</h2>
+<p>
+Written: 11/19/2020
+</p>
+
+
+<p>This past week I've been working on a project that had an interesting requirement. We needed a way for the public to submit information and then we needed to display that information, once curated, in a web application. This is a fairly typical web application and something I've been doing for nearly twenty years now. But what we were curious about was whether or not this could be done without using any kind of server-side processing. We ended up going a different way for the project, but not before I had built out a fully working process using Google Forms and Sheets. How did it work?</p>
+<p>I began by building a <a href="https://forms.google.com">Google Form</a>. I've used their form builder before and I knew it &quot;just worked&quot;, but I got to say I was blown away by how incredibly easy it was to use. It's got many different options for how to build your form, but what impressed me the most was how it intelligently parsed your questions. For an example, if you asked a question that seemed like it would need a yes or no answer, Google would default the type to a multiple choice and suggest both Yes and No and answers. If you picked Yes to add it as an option, it would then present No as the next suggestion. Time and time again it would guess right based on my questions which made working with it easy.</p>
+<p>Google lets you direct form answers to a Google Sheet. And here's where things got cool. Your form answers can be put in a sheet that is modified to have additional columns. This is how we did our curation. Since I knew I was going to be driving a web application with the data, I didn't want spammers to attack the form. By adding a simple &quot;Approved&quot; column to the sheet, I was able to write my code such that only approved rows of data would be rendered. It would still be possible for a person to discover the original data and see spam, but only if they went looking for it.</p>
+<p>Let's check out a demo of this in action. First, I built a form:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/11/forma1.jpg" alt="Three question form" class="lazyload imgborder imgcenter">
+</p>
+<p>My form has three questions, all required. Obviously you can have more, have optional questions, and so forth. You can view this form here: <a href="https://docs.google.com/forms/d/e/1FAIpQLSfYL868eNC-iWLVI50EvsPHtIVwfCIReMrBkbkZGiL_xd81sA/viewform">https://docs.google.com/forms/d/e/1FAIpQLSfYL868eNC-iWLVI50EvsPHtIVwfCIReMrBkbkZGiL_xd81sA/viewform</a></p>
+<p>I set up the form to save to a Google Sheet (that isn't the default), and then once in the sheet, I added a new column, Approved. I set it to be a checkbox so it was quick to use:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/11/form2.jpg" alt="Spreedsheet" class="lazyload imgborder imgcenter">
+</p>
+<p>Notice that Google has also added a timestamp. I don't need that but it's handy information. Now for the fun part. My sheet is only editable by me, but the public has the ability to store data in it via the form. But only I can edit the additional columns.</p>
+<p>I then published my sheet to the web. As I said above, this is where spam can come into play, but as I said, it's only going to be visible by curious web developers who look at my code and open up the sheet directly. You can see this yourself here: <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vQLVvd7h1zohI2GTCI4GPEVNEn_9t9qqtW-YJK4FKgv7p98d1PkLuMyAawF_uoLYulyzcqmJ301BDlF/pubhtml">https://docs.google.com/spreadsheets/d/e/2PACX-1vQLVvd7h1zohI2GTCI4GPEVNEn_9t9qqtW-YJK4FKgv7p98d1PkLuMyAawF_uoLYulyzcqmJ301BDlF/pubhtml</a>.</p>
+<p>So how do I get this into a web app? You can modify the URL to output both CSV and JSON. I'm going to use CSV since there is a great library for it, <a href="https://www.papaparse.com/">Papa Pare</a>. To get the CSV output, you change the URL to this: <a href="https://docs.google.com/spreadsheets/d/e/2PACX-1vQLVvd7h1zohI2GTCI4GPEVNEn_9t9qqtW-YJK4FKgv7p98d1PkLuMyAawF_uoLYulyzcqmJ301BDlF/pub?output=csv">https://docs.google.com/spreadsheets/d/e/2PACX-1vQLVvd7h1zohI2GTCI4GPEVNEn_9t9qqtW-YJK4FKgv7p98d1PkLuMyAawF_uoLYulyzcqmJ301BDlF/pub?output=csv</a> If you open that URL your browser should download the raw CSV.</p>
+<p><strong>Edit:</strong> Note that enabling remote access takes one step. When you publish to the web, it defaults to web. If you switch to CSV, you actually get the link shared above, but it does <em>not</em> work for anonymous requests, the user has to sign in. I also needed to get a shareable link, viewer only. The link did not need to be used and the URL itself isn't important. I shared the document that way too, opened it at least once, and then went back to to test my CSV link. At that point it worked. Long story short, you need to do both, and confirm your link works in an incognito browser before you try to use it in JavaScript.</p>
+<p>So how do I use it in a web app?</p>
+<p>I began by building a simple Vue.js application. I didn't have to use Vue but I had to use Vue, know what I mean? I started off with a simple layout:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;table&gt;
+    &lt;thead&gt;
+      &lt;tr&gt;
+        &lt;th&gt;Name&lt;/th&gt;
+        &lt;th&gt;Gender&lt;/th&gt;
+        &lt;th&gt;Age&lt;/th&gt;
+      &lt;/tr&gt;
+    &lt;/thead&gt;
+    &lt;tbody&gt;
+
+      &lt;tr v-for=&quot;cat in cats&quot;&gt;
+        &lt;td&gt;{{cat.name}}&lt;/td&gt;
+        &lt;td&gt;{{cat.gender}}&lt;/td&gt;
+        &lt;td&gt;{{cat.age}}&lt;/td&gt;
+      &lt;/tr&gt;
+    
+	&lt;/tbody&gt;
+  &lt;/table&gt;
+  &lt;div v-if=&quot;loadingCats&quot;&gt;Loading cats - please stand by...&lt;/div&gt;
+  &lt;div v-else&gt;Add your cat &lt;a :href=&quot;formURL&quot; target=&quot;_new&quot;&gt;here&lt;/a&gt;&lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<p>I've got a table to iterate over my awesome cats. Beneath that, I either show a loading message, or provide a link for folks to add their own cats. Now the JavaScript:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const formURL = 'https://docs.google.com/forms/d/e/1FAIpQLSfYL868eNC-iWLVI50EvsPHtIVwfCIReMrBkbkZGiL_xd81sA/viewform?usp=sf_link';
+
+const sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQLVvd7h1zohI2GTCI4GPEVNEn_9t9qqtW-YJK4FKgv7p98d1PkLuMyAawF_uoLYulyzcqmJ301BDlF/pub?output=csv';
+
+const app = new Vue({
+  el:'#app',
+  data:{
+    cats:[],
+    loadingCats:true,
+	formURL:formURL
+  },
+  created() {
+    
+   Papa.parse(sheetURL, {
+       download:true,
+       header:true,
+       skipEmptyLines:'greedy',
+       transformHeader: name =&gt; {
+         switch(name) {
+           case 'Approved': { return 'approved'; break; }
+           case 'How old is your cat?': { return 'age'; break; }
+           case 'What is your cat\'s name?': { return 'name'; break; }
+           case 'What is your cat\'s gender?': { return 'gender'; break; }
+         }
+       },
+       complete:res =&gt; {
+         this.cats = res.data.filter(f =&gt; {
+           return f.approved === 'TRUE';
+         });
+         this.loadingCats = false;
+       }
+   })
+  }
+})
+</code></pre>
+<p>If you don't use Vue.js, don't worry, lets just focus on the <code>Papa.parse</code> section. I pass it the following options:</p>
+<ul>
+<li>First, the URL of my Google Sheet.</li>
+<li>Next I use the <code>download</code> flag to tell Papa Parse to retrieve the contents.</li>
+<li>The <code>header</code> option means to treat the first row as a header.</li>
+<li>When you use <code>greedy</code>, Papa Parse tries to remove lines from the sheet that are just empty strings. This actually didn't work for me because my &quot;Approved&quot; column set defaults to False all the way through the entire sheet. I fix that later.</li>
+<li>By default, Papa Parse will create an array of objects for each row of data where the properties of each object are based on the headers. Since my headers are short text sentences, I wanted to remap them to nicer shorter values, that's where <code>transformHeader</code> comes in.</li>
+<li>The <code>complete</code> handler does two things for me. First it handles filtering out cats I haven't approved yet, and it also handles removing all the empty rows that are empty <em>except</em> for the FALSE value in Approved.</li>
+</ul>
+<p>And that's it. Now you can load the application and see the table, all driven by user content without any server-side code:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/11/form3.jpg" alt="Table of cats" class="lazyload imgborder imgcenter">
+</p>
+<p>You can see the complete code below:</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="zYBVWLY" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Form + Sheet Demo">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/zYBVWLY">
+  Form + Sheet Demo</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>Let me know what you think by leaving a comment below, and if you've used something like this before, I'd love to hear how!</p>
+<p><span>Photo by <a href="https://unsplash.com/@crismiron?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Miron Cristina</a> on <a href="https://unsplash.com/s/photos/form-cat?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

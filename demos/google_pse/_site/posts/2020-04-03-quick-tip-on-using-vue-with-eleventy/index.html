@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Quick Tip on Using Vue with Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Quick Tip on Using Vue with Eleventy</h2>
+<p>
+Written: 4/2/2020
+</p>
+
+
+<p>Ok, so this falls into the &quot;too obvious to blog&quot; category, but as I've made this mistake twice now I figured I'd share. Let's say your happily working on your Eleventy site and using Liquid as your template language. Your site is done and you realize you need to add some Vue.js to a page to enhance it. That's great because Vue is <em>awesome</em> for stuff like that. In my opinion, one of the reasons it's the best client-side framework out there is because it works great both for single page applications as well as simple page enhancement tasks. Anyway, you take an existing Eleventy template and begin to enhance it:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+&lt;h1&gt;Vue Demo&lt;/h1&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+	The time is {{ time }}
+&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/vue/dist/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;/app.js&quot;&gt;&lt;/script&gt;
+</code></pre>
+<p>Then you write your code.</p>
+<pre><code class="language-js">const app = new Vue({
+	el:'#app',
+	data: {
+		time:'to rock'
+	}
+});
+</code></pre>
+<p>Easy-peasy lemon squeezy. Should just work, right? So you fire up your browser and see...</p>
+<img src="https://static.raymondcamden.com/images/2020/04/vd1.png" alt="Browser screenshot, code isn't working" class="lazyload imgborder imgcenter">
+<p>Oh crap - where's the dynamic data? If you're like me you immediately open up devtools and if you do, you won't find an error. So what could it be?</p>
+<p>Well, if you view source on the page, you'll see this (I removed the layout code for brevity):</p>
+<pre><code class="language-html">
+&lt;h1&gt;Vue Demo&lt;/h1&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+	The time is 
+&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/vue/dist/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;/app.js&quot;&gt;&lt;/script&gt;
+</code></pre>
+<p>Woah wait - where's the template tokens for Vue? It's at this point you (hopefully) remember that LiquidJS and Vue use <em>the exact same token syntax</em>, i.e. {{ and }}.</p>
+<p>Luckily, there's a few quick options.</p>
+<ol>
+<li>Wrap the code you want to be available in your built site with the raw and endraw tags.</li>
+</ol>
+<script src="https://gist.github.com/cfjedimaster/ea6006f41307b8450ea3cde3b1223d0f.js"></script>
+<p>Yes, I switched to a Gist for this because I gave up trying to double escape the code on my own Eleventy blog. ;)</p>
+<ol start="2">
+<li>Given the nature of how much other code you have in your template, don't forget that Eleventy lets you use one of <em>many</em> template languages. You could switch to EJS for example. That's what I did on my blog for a template where Liquid would have been difficult to use. Or heck, if you hate yourself you could also use Pug! (Sorry, but Jade/Pug just annoys me at a deep level.)</li>
+</ol>
+<p>Anyway, I hope this helps and I also <em>sincerely</em> hope I'm not the only one to have made this mistake!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

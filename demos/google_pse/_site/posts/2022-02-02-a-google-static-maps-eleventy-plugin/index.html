@@ -1,0 +1,131 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>A Google Static Maps Eleventy Plugin</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>A Google Static Maps Eleventy Plugin</h2>
+<p>
+Written: 2/2/2022
+</p>
+
+
+<p>I've long been a fan of <a href="https://developers.google.com/maps/documentation/maps-static/overview">Google Static Maps</a> (technically the &quot;Maps Static API&quot; which sounds weird) for quite some time, except for when, you know, I worked for a <a href="https://www.here.com/">competitor</a>. I've blogged about this product for <em>years</em> now as I love it's simplicity. It's not even really an API, but just a carefully crafted URL. So for example, a map of Lafayette could be done like so:</p>
+<img src="https://maps.googleapis.com/maps/api/staticmap?center=Lafayette,LA&zoom=13&size=500x500&maptype=roadmap&key=AIzaSyCA0y7kh6V8poL-faDyVf3TpnLDNf9XtQY" width="500" height="500">
+<p>The image URL is: https://maps.googleapis.com/maps/api/staticmap?center=Lafayette,LA&amp;zoom=13&amp;size=500x500&amp;maptype=roadmap&amp;key=AIzaSyCA0y7kh6V8poL-faDyVf3TpnLDNf9XtQY</p>
+<p>The attributes of note are <code>center</code>, <code>zoom</code>, <code>size</code>, and <code>maptype</code>. The API supports precise latitude and longitude, but when you don't have that and just have an address in text, then you can use the <code>center</code> attribute. There's a <em>lot</em> to the API including adding multiple markers and other decorations. Check the <a href="https://developers.google.com/maps/documentation/maps-static/overview">docs</a> for examples.</p>
+<p>I thought it would be fun to build support for this in Eleventy via a <a href="https://www.11ty.dev/docs/shortcodes/">shortcode</a>. I create a new empty Eleventy site and added a simple function to handle outputting the URL in the right format:</p>
+<pre><code class="language-js">require('dotenv').config();
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY;
+
+module.exports = function(eleventyConfig) {
+
+
+	eleventyConfig.addShortcode(&quot;staticmap&quot;, function(address, width=500, height=500, zoom=13, maptype=&quot;roadmap&quot;) {
+		return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(address)}&amp;zoom=${zoom}&amp;size=${width}x${height}&amp;maptype=${maptype}&amp;key=${GOOGLE_MAPS_KEY}`;
+	});
+
+};
+</code></pre>
+<p>Technically I probably shouldn't use defaults for height and width, but this lets me build a map with literally just the address. In practice you could use it like so:</p>
+<pre><code class="language-html">
+&lt;img src=&quot;{% staticmap &quot;lafayette, la&quot; %}&quot;&gt;
+
+&lt;p&gt;
+&lt;img src=&quot;{% staticmap &quot;bellingham, wa&quot; 900 900 %}&quot; width=&quot;900&quot; height=&quot;900&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;img src=&quot;{% staticmap &quot;moscow&quot; 400 400 13 &quot;satellite&quot; %}&quot;&gt;
+&lt;/p&gt;
+
+</code></pre>
+<p>My first version handled outputting the img tag for you, but I thought folks may want to modify the class and other parameters so I figured returning just the URL was best. You can see a test of this in my Eleventy Demos repo here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/googlemaps">https://github.com/cfjedimaster/eleventy-demos/tree/master/googlemaps</a></p>
+<p>Ok, so that worked just fine, and was like three lines of code, but I figured, why not make it a proper [Eleventy plugin]? So I created a new directory and moved my logic for the shortcode over there, and added basic validation support for the key:</p>
+<pre><code class="language-js">module.exports = (eleventyConfig, options) =&gt; {
+
+	if(!options || !options.key) {
+		throw new Error('The Google Static Maps key must be passed.');
+	}
+
+	eleventyConfig.addShortcode(&quot;staticmap&quot;, function(address, width=500, height=500, zoom=13, maptype=&quot;roadmap&quot;) {
+		return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(address)}&amp;zoom=${zoom}&amp;size=${width}x${height}&amp;maptype=${maptype}&amp;key=${options.key}`;
+	});
+
+}
+</code></pre>
+<p>I threw this up on it's own repo (<a href="https://github.com/cfjedimaster/eleventy-plugin-googlestaticmaps">https://github.com/cfjedimaster/eleventy-plugin-googlestaticmaps</a>) and published it to npm. Now in my Eleventy demo, I can <code>npm install eleventy-plugin-googlestaticmaps</code> and use it via the plugin API:</p>
+<pre><code class="language-js">require('dotenv').config();
+
+const mapPlugin = require('eleventy-plugin-googlestaticmaps');
+
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY;
+
+module.exports = function(eleventyConfig) {
+
+	eleventyConfig.addPlugin(mapPlugin, {
+		key:GOOGLE_MAPS_KEY
+	});
+
+};
+</code></pre>
+<p>I used this in a new demo and created a quick data file named <code>stores.json</code>:</p>
+<pre><code class="language-json">[
+	{
+		&quot;name&quot;:&quot;Store Alpha&quot;, 
+		&quot;address&quot;:&quot;4300 Ambassador Caffery Pkwy, Lafayette, LA 70508&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Store Beta&quot;, 
+		&quot;address&quot;:&quot;2706 S Fieldspan Rd, Duson, LA 70529&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Store Gamma&quot;, 
+		&quot;address&quot;:&quot;807 S 5th St, Iota, LA 70543&quot;
+	},
+	
+	{
+		&quot;name&quot;:&quot;Store Delta&quot;, 
+		&quot;address&quot;:&quot;402 N Martin Luther King Hwy, Lake Charles, LA 70601&quot;
+	}	
+]
+</code></pre>
+<p>I then whipped up an example using pagination:</p>
+<pre><code class="language-html">---
+pagination:
+    data: stores
+    size: 1
+    alias: store
+permalink: &quot;stores/{{ store.name | slug }}/&quot;
+---
+
+&lt;p&gt;
+You can find {{ store.name }} at {{ store.address }}.
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;img src=&quot;{% staticmap store.address 500 500 %}&quot; width=&quot;500&quot; height=&quot;500&quot;&gt;
+&lt;/p&gt;
+</code></pre>
+<p>That's not terribly exciting, but it works:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/maps1.jpg" alt="Picture of the rendered output from the template, including the store name, address, and map." class="lazyload imgborder imgcenter">
+</p>
+<p>You can find this demo here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/googlemaps2">https://github.com/cfjedimaster/eleventy-demos/tree/master/googlemaps2</a></p>
+<p>Enjoy, and please feel free to file PRs against the <a href="https://github.com/cfjedimaster/eleventy-plugin-googlestaticmaps">plugin repository</a> if you've got any ideas!</p>
+<p>Photo by <a href="https://unsplash.com/@iambrettzeck?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Brett Zeck</a> on <a href="https://unsplash.com/s/photos/world-map?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

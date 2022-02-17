@@ -1,0 +1,180 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Some Notes on Building Blogs with Gridsome</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Some Notes on Building Blogs with Gridsome</h2>
+<p>
+Written: 1/11/2020
+</p>
+
+
+<p>I'm doing some research for an upcoming presentation on Gridsome (<a href="https://www.eventbrite.com/e/javascript-and-friends-vuejs-columbus-meetup-tickets-85537704577">An Introduction to Gridsome</a> on January 22) and ran into an issue understanding how one particular feature works that is of particular interest to folks building blogs with Gridsome.</p>
+<h3>tl;dr</h3>
+<blockquote>
+The frontmatter of your Markdown files become part of your GraphQL schema. You must use <code>date</code> as a field if you want URLs (paths) based on a date property. You will get additional properties (like excerpt) automatically.
+</blockquote>
+<p>Gridsome supports a filesystem plugin that let you point at a folder of files and automatically import them for use within your site. This is first shown in the docs for <a href="https://gridsome.org/docs/fetching-data/#import-with-source-plugins">Import with source plugins</a>. The specific code example show is this:</p>
+<pre><code class="language-js">module.exports = {
+  plugins: [
+    {
+      use: '@gridsome/source-filesystem',
+      options: {
+        path: 'docs/**/*.md',
+        typeName: 'DocPage'
+      }
+    }
+  ]
+}
+</code></pre>
+<p>That's fairly straight forward. Point to a path, give it a type name that will be used for the GraphQL server and you're good to go. You need a bit more information though, and you can then checkout the docs for <a href="https://gridsome.org/plugins/@gridsome/source-filesystem">source-filesystem</a>. This page brings up an important detail - that in order to use the filesystem a transformer must be used to parse your files. For Markdown, you are asked to install <a href="https://www.npmjs.com/package/@gridsome/transformer-remark">@gridsome/transformer-remark</a>.</p>
+<p>So far so good, but let's look at the sample code used in the plugin doc:</p>
+<pre><code class="language-js">module.exports = {
+  plugins: [
+    {
+      use: '@gridsome/source-filesystem',
+      options: {
+        typeName: 'BlogPost',
+        path: './content/blog/**/*.md',
+      }
+    }
+  ],
+  templates: {
+    BlogPost: '/blog/:year/:month/:day/:slug'
+  }
+}
+</code></pre>
+<p>One important detail different is that this example shows that you need a template to handle displaying the blog posts. <a href="https://gridsome.org/docs/templates/">Templates</a> are how Gridsome transform collections of data into pages. Personally I don't like the name as templates make me think of layouts, but that's just me. ;)</p>
+<p>Ok.... so here's where I began to have issues. If you look at the template defintion above, you'll see this value: <code>/blog/:year/:month/:day/:slug</code>. While I admit I didn't read every single line of Gridsome documentation, I wasn't sure where slug, year, month, and day came from.</p>
+<p>To make matters worse, when I tested, I used one Markdown file that looked like this:</p>
+<pre><code>Hi I'm *markdown*!
+</code></pre>
+<p>That's a valid example, but it was missing a crucial part, frontmatter.</p>
+<p>So while it's mostly obvious, I guess, that a blog using Markdown files will use frontmatter, it wasn't necessarily called out how important this was.</p>
+<p>Gridsome, the filesystem plugin, and the transformer plugin beneath that, will make use of your frontmatter in multiple ways.</p>
+<p>First, all the unique values of your frontmatter will be made available in the GraphQL collection. What do I mean by that? Imagine your blog has two files:</p>
+<pre><code>```
+title: Blog one
+cat: I like cats
+```
+</code></pre>
+<p>And...</p>
+<pre><code>```
+title: Blog one
+dog: I like cats too
+```
+</code></pre>
+<p>The resultant GraphQL schema type will include: <code>title</code>, <code>cat</code>, and <code>dog</code> properties. But that's not all - I'll get back to the full schema later in the post.</p>
+<p>Alright, so what about <code>:slug</code>? A slug generally refers to taking a string and making URL safe (and lower case), so something like &quot;Ray's Happy World&quot; turns into &quot;rays-happy-world&quot;. When I used <code>:slug</code> in my testing, I got this error:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/grid1.png" alt="Notice about using slug versus title" class="imgborder imgcenter">
+<p>Ok... so... I guess if my frontmatter included slug then I'd be fine, but for now I simply switched to using <code>:title</code> and it used that value from my frontmatter.</p>
+<p>Alright, so what about <code>:year/:month/:day</code>? In my testing this only worked if your frontmatter uses a value called <code>date</code> and it follows the UTC date format, then it will be picked up and parsed automatically. So like so:</p>
+<pre><code>---
+title: Goo
+date: 2020-01-05
+---
+
+This is goo
+</code></pre>
+<p>This will output a URL path like so, <code>/2020/01/05</code>. I didn't find this till this morning, but it is documented on the <a href="https://gridsome.org/docs/templates/">templates</a> page.</p>
+<p>Unfortunately I can't see anyway to change this behavior if you use another field for your date. To be clear, if you use another date field, like <code>edited: 2020-01-10</code> then Gridsome (and the relevant plugins) will recognize it as a date and make it available as a date type in GraphQL, but I don't believe you can use it in the template path. Wait, I lie. It absolutely can be if you write a custom path function. Here's how the templates doc demonstrate that:</p>
+<pre><code class="language-js">// gridsome.config.js
+module.exports = {
+  templates: {
+    Post: [
+      {
+        path: (node) =&gt; {
+          return `/product/${node.slug}/reviews`
+        }
+      }
+    ]
+  }
+}
+</code></pre>
+<p>So in my case I could use values from node.edited.</p>
+<p>Finally, if for some reason you don't specify a date field in your frontmatter, the output will include &quot;Invalid date&quot; in the path: <code>http://localhost:8080/blog/Invalid%20date/Invalid%20date/Invalid%20date/ray-rules/</code> So don't do that. ;)</p>
+<p>Ok... there's more. When Gridsome (and the relevant plugins again) parse your frontmatter, you get a <em>lot</em> of fields in your collection. For a test, I used three Markdown files with frontmatter like this:</p>
+<pre><code>---
+title: dude
+date: 2020-01-05
+cover_image: goo.jpg
+tags: php, perl
+---
+</code></pre>
+<p>This generated this GraphQL schema:</p>
+<pre><code class="language-js">type BlogPost implements Node {
+  id: ID!
+  path(to: String = &quot;default&quot;): String
+  fileInfo: BlogPost_FileInfo
+  content: String
+  excerpt: String
+  title: String
+  date(
+    format: String
+    locale: String
+  ): Date
+  cover_image: String
+  tags: String
+  headings(
+    depth: RemarkHeadingLevels
+    stripTags: Boolean = true
+  ): [RemarkHeading]
+  timeToRead(speed: Int = 230): Int
+  belongsTo(
+    sortBy: String = &quot;date&quot;
+    order: SortOrder = DESC
+    perPage: Int
+    skip: Int = 0
+    limit: Int
+    page: Int
+    sort: [SortArgument!]
+    filter: BelongsToFilterInput
+  ): NodeBelongsTo
+}
+</code></pre>
+<p>There's a lot there to note. For example, <code>excerpt</code> is useful for sure and <code>timeToRead</code> is nice. I'm guessing these come from the transformer, but I'm not sure where this is documented. <code>excerpt</code> is documented, I believe, way down in the <a href="https://github.com/jonschlinkert/gray-matter#options">gray-matter</a> code which is a couple chains down from the top plugin, but I really wish this was closer to the &quot;main&quot; Gridsome docs if that makes sense. <code>headings</code> seems to come from the fact that the <a href="https://github.com/gridsome/gridsome/tree/master/packages/transformer-remark#readme">transformer</a> plugin supports automatically creating anchors for your headings in Markdown. I mean I assume that's why. I like the automatic anchors. Not sure when I'd use it in GraphQL query. (Oh, I know how - for maybe making a table of contents for a long documentation page.)</p>
+<p>You'll notice that my tags ended up as a string. The source-filesystem plugin supports a <a href="https://gridsome.org/plugins/@gridsome/source-filesystem#refs">refs</a> feature that lets you fix that:</p>
+<pre><code class="language-js">module.exports = {
+  plugins: [
+    {
+      use: '@gridsome/source-filesystem',
+      options: {
+        refs: {
+          // Create a Tag content type and its nodes automatically.
+          tags: {
+            typeName: 'Tag',
+            create: true
+          }
+        }
+      }
+    }
+  ]
+}
+</code></pre>
+<p>I ran into one more issue though. It treated my multitag value &quot;php, perl&quot; as a string. When I rewrote it like so, <code>tags: [&quot;php&quot;,&quot;perl&quot;]</code> it worked. I also saw this represented in the GraphQL schema:</p>
+<pre><code class="language-js">tags(
+    sortBy: String
+    order: SortOrder = DESC
+    skip: Int = 0
+    sort: [SortArgument]
+    limit: Int
+  ): [Tag]
+</code></pre>
+<p>Finally, and I think I'm really done now, sometimes it took a server restart for Gridsome to notice and update the GraphQL schema. As a specific example, when I was testing getting tags to work as an array I had to restart with every change. I hope this helps!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@worldsbetweenlines?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Patrick Hendry</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

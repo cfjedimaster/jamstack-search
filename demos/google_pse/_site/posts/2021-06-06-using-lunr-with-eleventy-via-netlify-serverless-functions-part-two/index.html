@@ -1,0 +1,59 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using Lunr with Eleventy via Netlify Serverless Functions - Part Two</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using Lunr with Eleventy via Netlify Serverless Functions - Part Two</h2>
+<p>
+Written: 6/6/2021
+</p>
+
+
+<p>A few days ago I posted (<a href="https://www.raymondcamden.com/2021/06/02/using-lunr-with-eleventy-via-netlify-serverless-functions">&quot;Using Lunr with Eleventy via Netlify Serverless Functions&quot;</a>) about how you could use <a href="https://lunrjs.com/">Lunr</a> via serverless functions. The thinking was that it would help make Lunr more useful for large content sites. In a &quot;typical&quot; Lunr example, you load your data and client all in the browser, which means indexing a lot of content wouldn't be very effecient. That post demonstrated that you absolutely could run Lunr in a serverless function, but it bothered me that the index was being recreated on every search.</p>
+<p>The index is how Lunr is able to return matches based on input. It takes your raw data, applies some magic to it based on your text, and makes it so it can return more appropriate results for what your users are searching for. As the index process is pretty important, it's also something that takes time to build. (To be clear, it's incredibly fast in my testing, but obviously as your usage increases, it's going to take more time to build the index.)</p>
+<p>Lunr supports <a href="https://lunrjs.com/guides/index_prebuilding.html">pre-built</a> indexing to make this process go quicker and I covered how to use them in Eleventy earlier this year: <a href="https://www.raymondcamden.com/2021/01/22/using-pre-built-lunr-indexes-with-eleventy">&quot;Using Pre-Built Lunr Indexes with Eleventy&quot;</a></p>
+<p>For today's post, I took my previous demo and modified it to use a pre-built index. The change was pretty simple, I think. (But as always, <a href="https://twitter.com/raymondcamden">reach out</a> if you have questions.) I decided to use Eleventy's <a href="https://www.11ty.dev/docs/events/#afterbuild">afterBuild</a> event to create my index:</p>
+<pre><code class="language-js">eleventyConfig.on('afterBuild', () =&gt; {
+	console.log('running afterBuild');
+	const data = require('./netlify/functions/search/data.json');
+	const index = createIndex(data);
+	fs.writeFileSync('netlify/functions/search/index.json', JSON.stringify(index));
+	console.log('Wrote out my index.');
+});
+</code></pre>
+<p>The function, <code>createIndex</code>, is the same from the previous blog post, but here it is again:</p>
+<pre><code class="language-js">function createIndex(posts) {
+  return lunrjs(function() {
+    this.ref('id');
+    this.field('title');
+    this.field('content');
+    this.field('date');
+
+    posts.forEach((p,idx) =&gt; {
+      p.id = idx;
+      this.add(p);
+    });
+  });
+}
+</code></pre>
+<p>Lunr indexes can be serialized to JSON so I simply store the result in a file next to my data file. Modifying the search function was even quicker. Instead of building an index, I read in the file and pass it to a Lunr utility function:</p>
+<pre><code class="language-js">const data = require('./data.json');
+const index = lunrjs.Index.load(require('./index.json'));
+</code></pre>
+<p>And that's it. You can find the code here (<a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/lunr5">https://github.com/cfjedimaster/eleventy-demos/tree/master/lunr5</a>) and a demo here (<a href="https://eleventy-lunrtest2.netlify.app/search/">https://eleventy-lunrtest2.netlify.app/search/</a>). Use &quot;pdf&quot; as a good search term to see results. I also made the search code a bit nicer to let you know when it's working. As always, let me know what you think!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

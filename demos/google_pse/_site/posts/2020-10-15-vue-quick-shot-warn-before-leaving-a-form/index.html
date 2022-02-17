@@ -1,0 +1,128 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Warn Before Leaving a Form</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Warn Before Leaving a Form</h2>
+<p>
+Written: 10/14/2020
+</p>
+
+
+<p>Welcome to another <a href="https://www.raymondcamden.com/tags/vue+quick+shot/">Vue Quick Shot</a> - my series of posts of quick (kinda) solutions for common web development issues with Vue.js. Today's Quick Shot is an interesting one. First off, I'm not entirely sure what I'm sharing makes sense. I always encourage folks to leave comments with their suggestions but even more so for today's post - if what I'm sharing is problematic, I really want to know.</p>
+<p>The tip today is how to warn a user before they leave a form that hasn't been submitted. So imagine a form where a user has entered some data, but then they get distracted.</p>
+<p style="text-align: center">
+<img src="https://static.raymondcamden.com/images/2020/10/cat1.jpg" alt="Real picture of me being distrated" class="lazyload imgborder imgcenter">
+<i>Real picture of Raymond being distracted.</i>
+</p>
+<p>Instead of submitting the form, they instead hit some other link on your site, leaving the form without realizing that they forgot to finish what they had started. So how can we handle this?</p>
+<p>Modern browsers support an <a href="https://developer.mozilla.org/en-US/docs/Web/API/WindowEventHandlers/onbeforeunload">onbeforeunload</a> event, which as you can imagine is fired before the current page is unloaded, either via navigation or reload. According to MDN, your handler should look as follows:</p>
+<pre><code class="language-js">window.addEventListener('beforeunload', function (e) {
+  // Cancel the event
+  e.preventDefault(); // If you prevent default behavior in Mozilla Firefox prompt will always be shown
+  // Chrome requires returnValue to be set
+  e.returnValue = '';
+});
+</code></pre>
+<p>As you can see, you prevent the default behavior as well as set a <code>returnValue</code> property for just Chrome. In theory, <code>returnValue</code> lets you specify a message to show to the user, but since this can be abused badly, many browsers will ignore the value set here and just use a default. But the existence of the value is enough to trigger what you want - prompting before the user leaves. Just to be clear, you can't stop the user (which is a good thing), but you get to throw up a prompt to at least let them know.</p>
+<p>While this seems simple enough (kinda), now we have to figure out another problem. When do we use this? We need a way to determine when a form is &quot;dirty&quot; and has edited values. Here's what I figured out.</p>
+<p>First, I began with a form:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;form&gt;
+    &lt;p&gt;
+    &lt;label for=&quot;name&quot;&gt;Name&lt;/label&gt;
+    &lt;input type=&quot;text&quot; id=&quot;name&quot; v-model=&quot;name&quot;&gt;
+    &lt;/p&gt;
+    &lt;p&gt;
+    &lt;label for=&quot;comments&quot;&gt;Comments&lt;/label&gt;
+    &lt;textarea id=&quot;comments&quot; v-model=&quot;comments&quot;&gt;&lt;/textarea&gt;
+    &lt;/p&gt;
+    
+    &lt;p&gt;
+      &lt;input type=&quot;submit&quot;&gt;
+    &lt;/p&gt;
+  &lt;/form&gt;
+  
+  &lt;p&gt;
+    &lt;a href=&quot;https://www.starwars.com&quot;&gt;StarWars.com&lt;/a&gt;
+  &lt;/p&gt;
+  
+&lt;/div&gt;
+</code></pre>
+<p>The form consists of two fields, a submit button, and then I include a link as a way for a user to skip out of submitting the form. Now let's look at the code:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data:{
+    name:'',
+    comments:'',
+    handler:null
+  },
+  created() {
+    this.$watch(function() { return this.name + this.comments }, function(newVal,oldVal) {
+      //do we need to add?
+      if(oldVal === '' &amp;&amp; newVal !== '') {
+        this.handler =  function (e) {
+          // Cancel the event
+          e.preventDefault(); 
+          // Chrome requires returnValue to be set
+          e.returnValue = '';
+        };
+        window.addEventListener('beforeunload',this.handler);
+        console.log('add watcher'); 
+      } else if(newVal === '' &amp;&amp; oldVal !== '') {
+        window.removeEventListener('beforeunload',this.handler);
+        this.handler = null;
+        console.log('remove watcher');
+      }
+    });
+  }
+})
+</code></pre>
+<p>In my <code>created</code> function, I use <code>$watch</code> instead of <code>watchers</code> because I want to define my own function for recognizing a change. In my case, I create a string version of all the form fields and append them together. If you change anything in any field, it will fire off the watcher value.</p>
+<p>Inside the watcher handler, I then have to handle two cases:</p>
+<ul>
+<li>Our form did not have content, and now it does.</li>
+<li>Our form had content, and now it doesn't.</li>
+</ul>
+<p>The first part of the <code>if</code> block handlers going from no content to some content. I create the handler in the <code>this</code> scope so I can use it later. Later is the <code>else</code> block where I remove the handler.</p>
+<p>Now technically, a form could <em>default</em> to having values and you may edit it to be blank. In that case you could determine an initial value on load and compare the new values against that.</p>
+<p>There's one last aspect we have to handle. When you submit the form, the <code>beforeunload</code> event is going to fire. To handle that, can we listen for the submit button click event. First, we'll add a handler to the HTML:</p>
+<pre><code class="language-html">&lt;input type=&quot;submit&quot; @click=&quot;removeHandler&quot;&gt;
+</code></pre>
+<p>And then our code:</p>
+<pre><code class="language-js">methods:{
+	removeHandler() {
+		if(this.handler) window.removeEventListener('beforeunload',this.handler);
+		return true;
+	}
+}
+</code></pre>
+<p>Basically - if we setup the handler, remove it. Now, in theory, if you edit the form and try to leave via the link, you'll get a prompt:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/10/cat2.jpg" alt="Prompt before leaving web page" class="lazyload imgborder imgcenter">
+</p>
+<p>This is certainly not a perfect solutio, but it may help prevent a user from accidentally losing changes. If you've done this better (most likely!), please share your solution below! Here's a CodePen with the entire solution.</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="VwjeqPp" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Warn on Page Leave">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/VwjeqPp">
+  Warn on Page Leave</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

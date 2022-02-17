@@ -1,0 +1,96 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Processing Email Sentiment with Pipedream</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Processing Email Sentiment with Pipedream</h2>
+<p>
+Written: 4/14/2020
+</p>
+
+
+<p>Ok, a quick spoiler. Today's <a href="https://pipedream.com">Pipedream</a> post isn't really that interesting by itself,
+but I wanted a way to highlight a couple of cool features while working on an example that I hope folks will enjoy. I've done blog posts in the past about text sentiment analysis. I.e., what is a person talking about and what moods/emotions/etc are being used. In the past I've used IBM's Watson APIs for this and I've also used Microsoft's. Both have pretty darn cool APIs, but I thought I'd try something else, the npm <a href="https://www.npmjs.com/package/sentiment">Sentiment</a> module.</p>
+<p>This is an entirely opensource, Node-based text analysis tool that looks at input and looks specifically for positive and negative words. It supports multiple languages as well as the ability to customize what's positive or negative.</p>
+<p>Before I show using it, how did I find it? A day or so ago I noticed the &quot;Explore&quot; link in the top navigation of the Pipedream site. That brings you to <a href="https://pipedream.com/explore">https://pipedream.com/explore</a>.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es1.png" alt="" class="lazyload imgborder imgcenter">
+</p>
+<p>This page has a bunch of shared workflows that you can look at it, including one named <a href="https://pipedream.com/@pravin/p_zACkav/readme">Real-Time Sentiment Analysis</a>. Once you open up a workflow, you can click the big green COPY button to put a copy in your account and play around with it.</p>
+<p>So that's how I found the Sentiment package. Cool. I decided to build a demo based on customer service email processing. Imagine for a moment you've set up a &quot;support@yourcompany.tld&quot; email address. You may want to flag especially angry emails so that someone responds to them quicker. I built a demo of this workflow like so.</p>
+<p>First, I added an email trigger. This gives you a unique email address that will be checked often. When it gets new email, it will start the workflow.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es2.png" alt="Example email trigger" class="lazyload imgborder imgcenter">
+</p>
+<p>I next built a step that would serve to set up my constant values. I learned this technique from the Pipedream folks. It's not required - remember you can do everything in one step if you want - but I like this breakdown. In this case I've got one constant, the highest level I'll ignore. I.e., everything below this level is considered too angry. The Sentiment package returns a value from -5 to 5 based on how negative or positive it is.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es3.png" alt="Constants step" class="lazyload imgborder imgcenter">
+</p>
+<p>Next I built a step to do the analysis. This is a Node.js step with just a few lines of code:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	const Sentiment = require('sentiment');
+	const sentiment = new Sentiment();
+	this.sentiment = sentiment.analyze(steps.trigger.event.text);
+}
+</code></pre>
+<p>Basically it just runs the analysis and exports it by saying it to the <code>this</code> scope.</p>
+<p>My next step does two things. It does a quick check to see if the sentiment is above our threshold, and if not, if formats text for mailing.</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	if(steps.analyze_text.sentiment.comparative &gt; steps.constants.THRESHOLD) $end('Not unhappy enough.');
+
+	let from = '';
+	if(steps.trigger.event.from &amp;&amp; steps.trigger.event.from[0]) {
+	from = steps.trigger.event.from[0].address;
+	if(steps.trigger.event.from[0].name) from += ` (${steps.trigger.event.from[0].name})`;
+	}
+
+	let subject = 'No subject';
+	if(steps.trigger.event.subject) subject = steps.trigger.event.subject;
+
+	this.subject = 'Angry Email Report!';
+	this.body = `
+	Angry Email Report
+
+	Sent from: ${from}
+	Subject: ${subject}
+	Message Body: 
+	${steps.trigger.event.text}
+	`
+}
+</code></pre>
+<p>The only thing probably interesting there is I do a bit of inspection of the from values in the email and try to display it a bit nicer. I also check for a subject. If it's blank I use a default.</p>
+<p>The last step is to have it email me. I configure it with the values I used earlier:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es4.png" alt="Email config step" class="lazyload imgborder imgcenter">
+</p>
+<p>That just leaves testing! I sent a few angry emails (trust me, I've got some pent up quarantine rage going on) and watched as the workflow executed and processed my emails. Here's an example:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es5.png" alt="Sample email report" class="lazyload imgborder imgcenter">
+</p>
+<p>Of course, for my initial testing, I did something a bit quicker than writing email, and you should definitely make note of it. Workflows have a &quot;Send Test Event&quot; button and on the right is a blue pencil icon:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es6.png" alt="" class="lazyload imgborder imgcenter">
+</p>
+<p>If you click the pencil, you can edit the test event data. I did this to modify the content of the test:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/es7.png" alt="Editing test events" class="lazyload imgborder imgcenter">
+</p>
+<p>This is a very cool feature. Do note though that for this particular trigger, the &quot;shape&quot; of the event data doesn't quite match what you get when you send a real email. A <a href="https://github.com/PipedreamHQ/roadmap/issues/424">bug</a> has already been opened for this and it may be fixed by the time you read this post.</p>
+<p>I hope this post showed you a few new things about Pipedream and if you want to fork my workflow, you can find it here: <a href="https://pipedream.com/@raymondcamden/email-sentiment-warning-p_ZJC9vo/edit">https://pipedream.com/@raymondcamden/email-sentiment-warning-p_ZJC9vo/edit</a></p>
+<p><i>Header photo by <a href="https://unsplash.com/@musicfox?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">MusicFox Fx</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

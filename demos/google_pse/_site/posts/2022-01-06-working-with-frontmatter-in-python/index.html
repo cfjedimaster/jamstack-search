@@ -1,0 +1,96 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Working with Front Matter in Python</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Working with Front Matter in Python</h2>
+<p>
+Written: 1/6/2022
+</p>
+
+
+<p>Happy day! Yesterday I discovered a bug in the script I built to search my blog content (see my <a href="https://www.raymondcamden.com/2022/01/03/building-a-file-search-script-in-python">last post</a> for details. My search script uses Python to parse my blog content, try to find matches to a list of input terms, and return the result. I noticed that one result, when clicked, led to a 404. Why?</p>
+<p>My original script used the filename as a way to determine both the date and URL for a post. My Markdown files actually contain both the date and URL in their front matter, but I figured I didn't need to bother parsing that. Turns out, I was wrong. For reasons that are boring and not terribly important, it's possible the day referenced in a filename may not match the day used in the URL.</p>
+<p>With that realization I decided to update my search script to support parsing the front matter so I could safely get the URL and date. There's multiple Python libraries for YAML, and I actually started going down that route with the thinking that I'd read in my blog post, split the front matter out, and then parse, when I did a bit more searching and came across <a href="https://pypi.org/project/python-frontmatter/">python-frontmatter</a>. This is a Python module that will parse a file (or string) of a page that includes front matter and give you both the front matter as a dictionary and the rest of the content as a string. It's perfect! So imagine this source:</p>
+<pre><code>---
+title: My Cats
+categories: [&quot;cats&quot;,&quot;pets&quot;]
+description: Why cats are better than dogs.
+---
+
+This is the rest of the content.
+</code></pre>
+<p>After using pip to install <code>python-frontmatter</code>, you can use it like so:</p>
+<pre><code class="language-python">import frontmatter
+
+input = &quot;&quot;&quot;
+---
+title: My Cats
+categories: [&quot;cats&quot;,&quot;pets&quot;]
+description: Why cats are better than dogs.
+---
+
+This is the rest of the content.
+&quot;&quot;&quot;
+
+data = frontmatter.loads(input)
+
+print(&quot;Title&quot;, data[&quot;title&quot;])
+print(&quot;Categories&quot;, data[&quot;categories&quot;])
+print(&quot;Description&quot;, data[&quot;description&quot;])
+
+print(&quot;Content&quot;, data.content)
+</code></pre>
+<p>Keys in front matter can be addressed in dictionary-style in the result and <code>.content</code> can be used to reference the text after the front matter. Here's what the above outputs:</p>
+<pre><code>Title My Cats
+Categories ['cats', 'pets']
+Description Why cats are better than dogs.
+Content This is the rest of the content.
+</code></pre>
+<p>Cool. So I began to modify my search script. First, I modified <code>makeIndex</code> to use the module:</p>
+<pre><code class="language-python">def makeIndex(f):
+	result = []
+	for file in f:
+		with open(file) as reader:
+			
+			content = reader.read()
+
+			# to parse the yaml, we need to get just the front matter
+			data = frontmatter.loads(content)
+
+			result.append({
+				&quot;content&quot;:data.content,
+				&quot;date&quot;:data[&quot;date&quot;],
+				&quot;path&quot;:data[&quot;permalink&quot;]
+			})
+
+	return result
+</code></pre>
+<p>You can see it's a heck of a lot simpler than the previous version. The next modification was to the results display. My dates now included times which I didn't really need. I also modified how the URL was printed:</p>
+<pre><code class="language-python">for result in result:
+	# create url based on path
+	url = &quot;https://www.raymondcamden.com&quot; + result[&quot;path&quot;]
+	# for printing the date, just need the part before T
+	print(result[&quot;date&quot;].split(&quot;T&quot;)[0],&quot;-&gt;&quot;,url)
+</code></pre>
+<p>Here's sample output:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/01/fmp1.jpg" alt="Example output from the search script." class="lazyload imgborder imgcenter">
+</p>
+<p>Check out the <a href="https://pypi.org/project/python-frontmatter/">docs</a> for more information on what the module can do as I only used what was necessary for my script. The full version of my search script may be found here: <a href="https://github.com/cfjedimaster/raymondcamden2020/blob/master/search.py">https://github.com/cfjedimaster/raymondcamden2020/blob/master/search.py</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

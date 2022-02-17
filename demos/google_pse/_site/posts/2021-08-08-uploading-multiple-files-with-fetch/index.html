@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Uploading Multiple Files with Fetch</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Uploading Multiple Files with Fetch</h2>
+<p>
+Written: 8/8/2021
+</p>
+
+
+<p>This afternoon I was going through my &quot;blog ideas&quot; list and cleaning up entries I've changed my mind on. I came across something I added many months ago - using the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API">Fetch API</a> to upload multiple files at once. The reason it's stuck in my &quot;todo&quot; pile for so long is that I wasn't aware of a good service I could use to post my files against. I've done it before in Node.js and I know it's something I could do locally in an hour, but honestly I just didn't want to. That probably sounds a bit lazy but it's honest. Today though I came across <a href="https://httpbin.org/">httpbin.org</a>, an online service that lets you hit it with various types of HTTP methods and even supports file uploads. (Obviously it doesn't make those files available, it just reports back on the upload.) Even better, it supports CORS which means I could use CodePen. So with no more excuses at my disposal, today I finally built a simple demo.</p>
+<p>First off, I created a simple form:</p>
+<pre><code class="language-html">&lt;form&gt;
+	&lt;input id=&quot;filesToUpload&quot; type=&quot;file&quot; multiple&gt;
+	&lt;button id=&quot;testUpload&quot;&gt;Test Upload&lt;/button&gt;
+&lt;/form&gt;
+
+&lt;div id=&quot;status&quot;&gt;&lt;/div&gt;
+</code></pre>
+<p>I've got a file field, a button, and an empty div. Notice the file field uses the <code>multiple</code> attribute. This lets the end user select one or more files. For my first iteration, I used the following JavaScript:</p>
+<pre><code class="language-js">document.addEventListener('DOMContentLoaded', init, false);
+
+let fileField, statusDiv;
+
+async function init() {
+	fileField = document.querySelector('#filesToUpload');
+	statusDiv = document.querySelector('#status');
+	document.querySelector('#testUpload').addEventListener('click', doUpload, false);
+}
+
+async function doUpload(e) {
+	e.preventDefault();
+	statusDiv.innerHTML = '';
+
+	let totalFilesToUpload = fileField.files.length;
+	
+	//nothing was selected 
+	if(totalFilesToUpload === 0) {
+		statusDiv.innerHTML = 'Please select one or more files.';
+		return;
+	}
+
+	for(let i=0;i&lt;totalFilesToUpload; i++) {
+		statusDiv.innerHTML = `Working on file ${i+1} of ${totalFilesToUpload}`;
+		let resp = await uploadFile(fileField.files[i]);
+		console.log(`Done with ${i+1} item.`);
+	}
+	
+	statusDiv.innerHTML = 'All complete.';
+	fileField.value='';
+}
+
+async function uploadFile(f) {
+	let form = new FormData();
+	form.append('file', f);	
+	let resp = await fetch('https://httpbin.org/post', { method: 'POST', body:form });
+	let data = await resp.json();
+	//console.log(data);
+	return data;
+}
+</code></pre>
+<p>From top to bottom - I begin by using <code>querySelector</code> to cache access to my file field and empty div. Then I add a click handler to the button.</p>
+<p>The click handler first checks to see if any files were selected. If none were then we print out a message and leave. Otherwise, we then iterate over the <code>files</code> array and call an async function, <code>uploadFile</code>. In my demo, <code>uploadFile</code> does a <code>POST</code> to httpbin and returns the result. Right now I'm ignoring the result but in a real application you would probably need something from there. At the end of each upload I update my div with a status.</p>
+<p>Finally I report that everything is complete and reset the file field. Here's a CodePen for you to try it out yourself:</p>
+<p class="codepen" data-height="500" data-theme-id="dark" data-default-tab="html,result" data-slug-hash="xxdQzpE" data-user="cfjedimaster" style="height: 500px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/xxdQzpE">
+  fetch multi sequential</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://cpwebassets.codepen.io/assets/embed/ei.js"></script>
+<p>This works well, but uploads the files one after the other. It would be nicer if they were all uploaded at once, right? Here's an updated version that does that:</p>
+<pre><code class="language-js">document.addEventListener('DOMContentLoaded', init, false);
+
+let fileField, statusDiv;
+
+async function init() {
+	fileField = document.querySelector('#filesToUpload');
+	statusDiv = document.querySelector('#status');
+	document.querySelector('#testUpload').addEventListener('click', doUpload, false);
+}
+
+async function doUpload(e) {
+	e.preventDefault();
+	statusDiv.innerHTML = '';
+
+	let totalFilesToUpload = fileField.files.length;
+	
+	//nothing was selected 
+	if(totalFilesToUpload === 0) {
+		statusDiv.innerHTML = 'Please select one or more files.';
+		return;
+	}
+
+	statusDiv.innerHTML = `Uploading ${totalFilesToUpload} files.`;
+
+	let uploads = [];	
+	for(let i=0;i&lt;totalFilesToUpload; i++) {
+		uploads.push(uploadFile(fileField.files[i]));
+	}
+	
+	await Promise.all(uploads);
+	
+	statusDiv.innerHTML = 'All complete.';
+	fileField.value='';
+}
+
+async function uploadFile(f) {
+	console.log(`Starting with ${f.name}`);
+	let form = new FormData();
+	form.append('file', f);	
+	let resp = await fetch('https://httpbin.org/post', { method: 'POST', body:form });
+	let data = await resp.json();
+	console.log(`Done with ${f.name}`);
+	return data;
+}
+</code></pre>
+<p>The main difference is tht now I don't <code>await</code> the call to <code>uploadFile</code> and use the implied Promise returned instead. I can then use <code>Promise.all</code> on the array of uploads to notice when they are all done. One thing I don't have is the nice &quot;X of Y&quot; message, and that's possibly something I could do too, but for now the improved speed should be nice. If you want to test this version, it's below.</p>
+<p class="codepen" data-height="500" data-theme-id="dark" data-default-tab="html,result" data-slug-hash="zYwMLxZ" data-user="cfjedimaster" style="height: 500px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/zYwMLxZ">
+  fetch multi sequential</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://cpwebassets.codepen.io/assets/embed/ei.js"></script>
+<p>Enjoy, let me know what you think!</p>
+<p>Photo by <a href="https://unsplash.com/@miaanderson?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Mia Anderson</a> on <a href="https://unsplash.com/s/photos/fetch?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

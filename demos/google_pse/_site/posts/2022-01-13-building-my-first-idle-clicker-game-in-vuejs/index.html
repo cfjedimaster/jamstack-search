@@ -1,0 +1,263 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Building my First Idle Clicker Game in Vue.js</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Building my First Idle Clicker Game in Vue.js</h2>
+<p>
+Written: 1/13/2022
+</p>
+
+
+<p>For a while now I've been enamoured with so-called &quot;idle&quot; or &quot;clicker&quot; games. These are games that are (typically) incredibly simple, sometimes having you just click one button over and over again, and typically let you run them in the background, coming back hours later to check your progress. What makes these games interesting is that while they start simpler, as I said, with one button sometimes, they typically grow in complexity as the game goes on.</p>
+<p>Some of the most wellknown games of this genre are <a href="https://adarkroom.doublespeakgames.com/">A Dark Room</a> and <a href="https://www.decisionproblem.com/paperclips/index2.html">Universal Paperclips</a>. I'll warn you - before clicking either of those links, be sure you have the willpower to walk away from them. At least for me, both are incredibly addicting. They start off so simple, but then morph into something so incredibly engaging it's hard to let go. I play both maybe 2-3 times a year and typically I get obsessed with it over a three to four day period.</p>
+<p>As someone who loves games, I've also taken a stab at building my own games as well. I've discovered that, not surprisingly, it's a hell of a lot of work, but I still enjoy doing it from time to time. Most recently, I came up with a simple clicker game in Vue.js - <a href="https://idlefleet.netlify.app/">IdleFleet</a>.</p>
+<p>Now if you want - stop reading, open the link above, and just play the game. The rest of the post will talk about how it was built, how it works, and so forth, but if you want to be surprised, now is the time to check it out.</p>
+<h2>The Basics</h2>
+<p>IdleFleet is based on a simple premise. You are a commander of a fleet of ships. You order them to go out and do &quot;trade stuff&quot;. The ships of your fleet return after some random amount of time (each ship does it's own thing so they come back one by one) and you earn money. You take that money and buy more ships. Repeat.</p>
+<p>One of the first fun things you'll see is that I use a npm package called <a href="https://www.npmjs.com/package/random-word-slugs">random-word-slug</a> to name ships. This gives you fun little names like &quot;Wet Book&quot;, &quot;Early Printer&quot;, and &quot;Ripe Fountain&quot;. This is done with the following function:</p>
+<pre><code class="language-js">generateShipName() {
+	const options = {
+		format:'title',
+		partsOfSpeech: ['adjective', 'noun'],
+	}
+	return randomWordSlugs.generateSlug(2, options);
+},
+</code></pre>
+<p>Like most idle clicker games, IdleFleet will slowly add more options as you play. The first option is simple a stat, &quot;Credits Per Second&quot;, and it gets added to your display once you hit 5K credits.</p>
+<p>Then you get &quot;Mercantile Skill&quot;. It opens up once you've earned 10K in credits. This is a skill that slowly improves the credits your ships earn. It can be scaled infinitely, but the price goes up in a linear fashion. I did this with a simple computed value:</p>
+<pre><code class="language-js">newMercantileCost() {
+	return 10000 * this.mercantileSkill;
+ },
+</code></pre>
+<p>The next item that opens up is Ship Speed. You can start buying that at 100K credits and it will impact how long your ship needs to travel to get credits. I'll talk a bit more about travelling in a minute. This stat uses the same formula as the Mercantile skill.</p>
+<p>The final unlockable is &quot;auto ship send&quot;, which basically removes the need to click anything at all. It will run at an interval and click &quot;Send Ships&quot;, automatically sending out every idle ship. This opens up at one million credits.</p>
+<h2>The Not So Basics</h2>
+<p>As I said, sending your ships out is a somewhat variable process and one that evolved as I worked on the game. Initially, I designed a simple object for the ship. Here's an early version of the <code>addShip</code> function.</p>
+<pre><code class="language-js">addShip() {
+	let mainThat = this;
+	// idea: new name based on npm package that picks nouns
+	let name = this.generateShipName();
+	let newShip = {
+	available: true,
+	name,
+	returnTime:null,
+	trip() {
+		mainThat.addLog(`${this.name} departed...`);
+		this.available = false;
+		this.tripDuration = getRandomInt(DURATION_MIN, DURATION_MAX);
+		// reduce by ship speed bonus
+		/*
+		current logic, given X for speed, you get 1-X percent saving, maxed at 95. 
+		So if ship speed is 200, most likely you will max out
+		*/
+		if(mainThat.shipSpeed &gt;= 2) {
+			let percentSavings = Math.min(getRandomInt(1, mainThat.shipSpeed), 95);
+			console.log('percent savings based on speed is ', percentSavings);
+			console.log('return time was ', this.tripDuration);
+			this.tripDuration -= Math.floor((this.tripDuration * (percentSavings/100)));
+			console.log('return time is now ', this.tripDuration);
+		}
+		console.log('trip started, returns in '+this.tripDuration+ ' seconds');
+		let now = new Date();
+		now.setSeconds(now.getSeconds() + this.tripDuration);
+		this.returnTime = now;
+
+		let that = this;
+
+		setTimeout(function() {
+			that.available = true;
+			that.returnTime = null;
+			let moneyEarned = mainThat.earnMoney();
+			mainThat.addLog(`${that.name} returned and earned ${moneyEarned} credits.`);
+			mainThat.credits += moneyEarned;
+		}, this.tripDuration*DURATION_INTERVAL);
+	}
+	};
+	this.ships.push(newShip);
+	this.addLog(`${newShip.name} acquired.`);
+},
+</code></pre>
+<p>That's quite a bit of logic, but it worked well, at least at first. Notice how the ship has a function, <code>trip</code>, that handles figuring out ow long the trip will be. It's random based on a min and max range that gets better as you increase your ship speed. I use a <code>setTimeout</code> to handle the ship returning. It marks it as available again and adds money to your account.</p>
+<p>As I said, this worked great, until one of my players had a few thousand or so ships. The timeouts were making the game drag. So, I pivoted. Instead of a ship having it's own timed function, I created a central &quot;heart beat&quot; for the game. Now ships will simply figure out, &quot;I return at X&quot;, and the heart beat can iterate through them and figure which ones are done.</p>
+<p>Here's that new logic:</p>
+<pre><code class="language-js">addShip() {
+	let mainThat = this;
+	// idea: new name based on npm package that picks nouns
+	let name = this.generateShipName();
+	let newShip = {
+	available: true,
+	name,
+	returnTime:null,
+	trip() {
+		mainThat.addLog(`${this.name} departed...`);
+		this.available = false;
+		this.tripDuration = getRandomInt(DURATION_MIN, DURATION_MAX);
+		// reduce by ship speed bonus
+		/*
+		current logic, given X for speed, you get 1-X percent saving, maxed at 95. 
+		So if ship speed is 200, most likely you will max out
+		*/
+		if(mainThat.shipSpeed &gt;= 2) {
+			let percentSavings = Math.min(getRandomInt(1, mainThat.shipSpeed), 95);
+			//console.log('return time was ', this.tripDuration);
+			this.tripDuration -= Math.floor((this.tripDuration * (percentSavings/100)));
+			//console.log('return time is now ', this.tripDuration);
+		}
+		//console.log('trip started, returns in '+this.tripDuration+ ' seconds');
+		let now = new Date();
+		now.setSeconds(now.getSeconds() + this.tripDuration);
+		this.returnTime = now;
+	}
+	};
+	this.ships.push(newShip);
+	this.addLog(`${newShip.name} acquired.`);
+},
+</code></pre>
+<p>As you can see, I still have a <code>trip</code> function, but now it's just figuring out how long it will be. My heart beat function will handle checking it. I also let the user know when the <em>next</em> ship is returning. Given N ships out on a job, I report on the one that's returning the soonest.</p>
+<pre><code class="language-js"> heartBeat() {
+	/*
+	heartBeat now handles all ship related travel announcements. 
+	*/
+
+	let nextShipResult = new Date(2099,1,1);
+	let hasNextShip = false;
+
+	//loop through ships and see who is done
+	for(let ship of this.ships) {
+	//unavailable ships are traveling
+	if(!ship.available) {
+		if(new Date() &gt; ship.returnTime) {
+		ship.available = true;
+		ship.returnTime = null;
+		let moneyEarned = this.earnMoney();
+		this.addLog(`${ship.name} returned and earned ${numberFormat(moneyEarned)} credits.`);
+		this.credits += moneyEarned;
+		} else if (ship.returnTime &lt; nextShipResult) {
+			nextShipResult = ship.returnTime;
+			hasNextShip = true;
+		}
+	}
+
+
+	}
+
+	if(hasNextShip) {
+	this.nextShipReturnTime = Math.max(Math.floor((((new Date()) - nextShipResult) / 1000) * -1),0) + ' seconds';
+	} 
+
+},
+</code></pre>
+<p>I also have two other timed functions. One is a simple random message generator and one is an &quot;event&quot; system. On startup, I request a JSON file:</p>
+<pre><code class="language-js">this.messages = await (await fetch('./messages.json')).json();
+</code></pre>
+<p>This messages files contains a list of five things - random messages, which have no impact on the game. Then I have a list of events that represent you winning or loosing money as well as winning or loosing ships. The file looks like this (and yes, I see the typos now, going to correct them after I finish the blog post):</p>
+<pre><code class="language-json">
+{
+  &quot;news&quot;: [
+    &quot;Starbrand announces new line of eco-friendly spaceships.&quot;,
+    &quot;Economic reports continue to boom - stockholders happy!&quot;,
+    &quot;Most popular social network promises edit support soon.&quot;,
+    &quot;In a recent survey, ship captains report general satisifaction with job.&quot;,
+    &quot;In a recent survey, ship captains report general dissatisifaction with job.&quot;,
+    &quot;Billions reeling as social media star switches to new toilet paper brand.&quot;,
+    &quot;Galaxy-wide Outlook service down - please use tin cans in the meantime.&quot;
+  ],
+  &quot;moneyWon&quot;: [
+    &quot;A long-lost aunt left you an inheritance.&quot;,
+    &quot;You got a refund from the Intergalatic Revenus Service.&quot;,
+    &quot;You won the lottery!&quot;,
+    &quot;You found a stash of credits in the back of one of your ships.&quot;,
+    &quot;You won a lawsuit against another trader.&quot;,
+    &quot;You came in first place in a game show.&quot;
+  ],
+  &quot;moneyLost&quot;: [
+    &quot;You got a tax bill from the Intergalatic Revenus Service.&quot;,
+    &quot;One of your ships needed repairs.&quot;,
+    &quot;You lost credits betting on space horses.&quot;,
+    &quot;You lost credits to email spammers.&quot;,
+    &quot;Gas prices spiked retroactively.&quot;,
+    &quot;You lost a lawsuit against another trader.&quot;
+  ],
+  &quot;shipWon&quot;: [
+    &quot;Congratulations! You won a new ship on a game show!&quot;,
+    &quot;A long-lost uncle left you his ship.&quot;,
+    &quot;You found an abandoned ship and add it to your fleet.&quot;,
+    &quot;You sued another trader for their ship and won it!&quot;
+  ],
+  &quot;shipLost&quot;: [
+    &quot;A ship was lost to a black hole.&quot;,
+    &quot;Pirates blew up one of your ships!&quot;,
+    &quot;Pirates stole one of your ships!&quot;,
+    &quot;Space monkeys destroy one of your ships!&quot;
+  ]
+}
+</code></pre>
+<p>I wanted a separate list of strings like this so that it was easy to expand when I was feeling creative. Random messages work like so:</p>
+<pre><code class="language-js">randomMsg() {
+	let msg = this.messages.news[getRandomInt(0, this.messages.news.length)];
+	this.addLog(`&lt;strong&gt;${msg}&lt;/strong&gt;`);
+},
+</code></pre>
+<p>Random events are a bit more complex. Since they can have a negative impact, I have to ensure you don't end up with negative money or ships. Here's that routine:</p>
+<pre><code class="language-js">randomEvent() {
+	/*
+	Random events fall into 4 categories:
+	get money
+	lose money
+	get ship
+	lose ship
+	for $$ stuff, it's always a percentage so the rewards are good later on
+	*/
+	let whatHappened = getRandomInt(0, 100);
+
+	if(whatHappened &lt; 40) {
+		let moneyWon = Math.floor(this.credits * (getRandomInt(10, 70)/100));
+		let msg = this.messages.moneyWon[getRandomInt(0, this.messages.moneyWon.length)] + ` Gain ${numberFormat(moneyWon)} credits!`;
+		this.credits += moneyWon;
+		this.addLog(`&lt;strong class=&quot;good&quot;&gt;${msg}&lt;/strong&gt;`);
+	} else if(whatHappened &lt; 80) {
+		// if money is real low, do nothing
+		if(this.credits &lt; 500) return;
+		let moneyLost = Math.floor(this.credits * (getRandomInt(5, 30)/100));
+		let msg = this.messages.moneyLost[getRandomInt(0, this.messages.moneyLost.length)] + ` Lose ${numberFormat(moneyLost)} credits.`;
+		this.credits -= moneyLost;
+		this.addLog(`&lt;strong class=&quot;bad&quot;&gt;${msg}&lt;/strong&gt;`);
+	} else if(whatHappened &lt; 92) {
+		let msg = this.messages.shipWon[getRandomInt(0, this.messages.shipWon.length)];
+		this.addLog(`&lt;strong class=&quot;good&quot;&gt;${msg}&lt;/strong&gt;`);
+		this.addShip();
+	} else {
+		/* disabled for now as I need to work on logic for removing a ship */
+		return;
+		if(this.ships.length &lt; 10) return;
+		let msg = this.messages.shipLost[getRandomInt(0, this.messages.shipLost.length)];
+		this.addLog(`&lt;strong class=&quot;bad&quot;&gt;${msg}&lt;/strong&gt;`);
+		//no idea if this will break shit
+		this.ships.shift();
+	}
+
+	setTimeout(this.randomEvent, (5000 * 60) + (getRandomInt(0,3000)*60));
+
+},
+</code></pre>
+<p>Basically, pick a random number, and that decides on the type of event (money won, money lost, ship won, ship lost), and then I run that logic. Loosing a ship is currently disabled, but I'm going to fix that soon. (I'm pretty sure I can just remove the <code>return</code> statement.)</p>
+<p>All in all, it's a pretty simple game, but it's a bit fun. I would love for folks to submit ideas and PRs, you can find the complete source code here: <a href="https://github.com/cfjedimaster/IdleFleet">https://github.com/cfjedimaster/IdleFleet</a>.</p>
+<p>Enjoy!</p>
+<p>Photo by <a href="https://unsplash.com/@markuswinkler?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Markus Winkler</a> on <a href="https://unsplash.com/s/photos/fleet-of-spaceships?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

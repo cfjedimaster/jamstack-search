@@ -1,0 +1,248 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Enhancing Your Netlify Build Notifications</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Enhancing Your Netlify Build Notifications</h2>
+<p>
+Written: 5/28/2020
+</p>
+
+
+<p>One of the features Netlify supports is sending an email to you on various events. One of them is a successful build. Here's what it looks like:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/netlify1.png" alt="" class="lazyload imgborder imgcenter">
+</p>
+<p>Short and sweet. But I really want a bit more information about the build, specifically how long it took. Netlify is quick, but my site is rather large. Every now and then I screw things up and one of the ways I can quickly tell is by seeing how long a build took. All of this information is available and I can go to the Netlify site to get those details, but it would be nice if my email simply passed that along.</p>
+<p>Luckily, Netlify supports <a href="https://docs.netlify.com/functions/trigger-on-events/#available-triggers">triggers</a> that let you fire off calls to serverless functions based on various events. Right now the details of the information sent isn't documented, so my initial work was just setting up a function (properly named, Netlify uses the name to associate it with the event) and using console.log to look at the payload. While kinda spelled out in the text, but not made clear, this data will be in your <code>event.body</code> value passed to the function and will be a JSON string. To look at the payload, I used this:</p>
+<pre><code class="language-js">let pubData = JSON.parse(event.body).payload;
+console.log(pubData);
+</code></pre>
+<p>There's no way to retrieve logs from functions via the CLI so I used the Function tab in my Netlify site to view the output. It's hard to read so I literally copied it to my browser console, re-parsed it (it was in string form in the log of course), copied to my clipboard, and pasted it into my editor. Here's what payload looks like. There are a few values I think may be sensitive so I've replaced them with the name of my favorite character from My Little Pony.</p>
+<pre><code class="language-js">&quot;payload&quot;: {
+	&quot;id&quot;: &quot;juniper montage&quot;,
+	&quot;site_id&quot;: &quot;9727f051-52fd-4ae7-9128-a0812610ca69&quot;,
+	&quot;build_id&quot;: &quot;5ed1214aa9b8d70007a87964&quot;,
+	&quot;state&quot;: &quot;ready&quot;,
+	&quot;name&quot;: &quot;raymondcamden&quot;,
+	&quot;url&quot;: &quot;https://www.raymondcamden.com&quot;,
+	&quot;ssl_url&quot;: &quot;https://www.raymondcamden.com&quot;,
+	&quot;admin_url&quot;: &quot;https://app.netlify.com/sites/raymondcamden&quot;,
+	&quot;deploy_url&quot;: &quot;http://master--raymondcamden.netlify.app&quot;,
+	&quot;deploy_ssl_url&quot;: &quot;https://master--raymondcamden.netlify.app&quot;,
+	&quot;created_at&quot;: &quot;2020-05-29T14:50:50.922Z&quot;,
+	&quot;updated_at&quot;: &quot;2020-05-29T14:56:14.401Z&quot;,
+	&quot;user_id&quot;: &quot;juniper montage&quot;,
+	&quot;error_message&quot;: null,
+	&quot;required&quot;: [],
+	&quot;required_functions&quot;: [],
+	&quot;commit_ref&quot;: &quot;b10e3145baf01f900cd3376257102ee89c5a1c3e&quot;,
+	&quot;review_id&quot;: null,
+	&quot;branch&quot;: &quot;master&quot;,
+	&quot;commit_url&quot;: &quot;https://github.com/cfjedimaster/raymondcamden2020/commit/b10e3145baf01f900cd3376257102ee89c5a1c3e&quot;,
+	&quot;skipped&quot;: null,
+	&quot;locked&quot;: null,
+	&quot;log_access_attributes&quot;: {
+		&quot;type&quot;: &quot;firebase&quot;,
+		&quot;url&quot;: &quot;https://juniper montage&quot;,
+		&quot;endpoint&quot;: &quot;https://netlify-builds3.firebaseio.com&quot;,
+		&quot;path&quot;: &quot;/builds/juniper montage/log&quot;,
+		&quot;token&quot;: &quot;juniper montage&quot;
+	},
+	&quot;title&quot;: &quot;testing func3&quot;,
+	&quot;review_url&quot;: null,
+	&quot;published_at&quot;: &quot;2020-05-29T14:56:14.166Z&quot;,
+	&quot;context&quot;: &quot;production&quot;,
+	&quot;deploy_time&quot;: 319,
+	&quot;available_functions&quot;: [
+		{
+		&quot;n&quot;: &quot;deploy-succeeded&quot;,
+		&quot;d&quot;: &quot;09b55bccc9cbe877bd6bc34eee1dc6f5bc75f332b531edca34e636cff2557e76&quot;,
+		&quot;id&quot;: &quot;d80076a174194017b771fccf6e9aebefbcf1265780b86010282d6d3e38bcca75&quot;,
+		&quot;a&quot;: &quot;998805804580&quot;,
+		&quot;c&quot;: &quot;2020-05-29T14:52:59.641Z&quot;,
+		&quot;r&quot;: &quot;nodejs12.x&quot;,
+		&quot;s&quot;: 563
+		}
+	],
+	&quot;summary&quot;: {
+		&quot;status&quot;: &quot;ready&quot;,
+		&quot;messages&quot;: [
+		{
+			&quot;type&quot;: &quot;info&quot;,
+			&quot;title&quot;: &quot;2 new files uploaded&quot;,
+			&quot;description&quot;: &quot;2 assets changed.&quot;,
+			&quot;details&quot;: null
+		},
+		{
+			&quot;type&quot;: &quot;info&quot;,
+			&quot;title&quot;: &quot;89 redirect rules processed&quot;,
+			&quot;description&quot;: &quot;All redirect rules deployed without errors.&quot;,
+			&quot;details&quot;: &quot;&quot;
+		},
+		{
+			&quot;type&quot;: &quot;info&quot;,
+			&quot;title&quot;: &quot;No header rules processed&quot;,
+			&quot;description&quot;: &quot;This deploy did not include any header rules. [Learn more about headers](https://www.netlify.com/docs/headers-and-basic-auth/).&quot;,
+			&quot;details&quot;: &quot;&quot;
+		},
+		{
+			&quot;type&quot;: &quot;info&quot;,
+			&quot;title&quot;: &quot;All linked resources are secure&quot;,
+			&quot;description&quot;: &quot;Congratulations! No insecure mixed content found in your files.&quot;,
+			&quot;details&quot;: null
+		}
+		]
+	},
+	&quot;screenshot_url&quot;: null,
+	&quot;site_capabilities&quot;: {
+		&quot;title&quot;: &quot;Netlify Team Premium&quot;,
+		&quot;asset_acceleration&quot;: true,
+		&quot;form_processing&quot;: true,
+		&quot;cdn_propagation&quot;: &quot;partial&quot;,
+		&quot;build_gc_exchange&quot;: &quot;buildbot-global-gc&quot;,
+		&quot;build_node_pool&quot;: &quot;buildbot-global&quot;,
+		&quot;domain_aliases&quot;: true,
+		&quot;secure_site&quot;: true,
+		&quot;prerendering&quot;: true,
+		&quot;proxying&quot;: true,
+		&quot;ssl&quot;: &quot;custom&quot;,
+		&quot;rate_cents&quot;: 0,
+		&quot;yearly_rate_cents&quot;: 0,
+		&quot;ipv6_domain&quot;: &quot;global.netlify.com&quot;,
+		&quot;branch_deploy&quot;: true,
+		&quot;managed_dns&quot;: true,
+		&quot;geo_ip&quot;: true,
+		&quot;split_testing&quot;: true,
+		&quot;role_access_control&quot;: true,
+		&quot;cdn_fanout&quot;: &quot;global.netlify.com&quot;,
+		&quot;account_audit&quot;: true,
+		&quot;site_global_access_controls&quot;: true,
+		&quot;id&quot;: &quot;nf_team_business&quot;,
+		&quot;cdn_tier&quot;: &quot;custom&quot;,
+		&quot;analytics&quot;: {
+		&quot;pageviews&quot;: {
+			&quot;unlimited&quot;: true,
+			&quot;unit&quot;: &quot;pageviews&quot;
+		}
+		},
+		&quot;forms&quot;: {
+		&quot;submissions&quot;: {
+			&quot;unlimited&quot;: true,
+			&quot;unit&quot;: &quot;submissions&quot;
+		},
+		&quot;storage&quot;: {
+			&quot;unlimited&quot;: true,
+			&quot;unit&quot;: &quot;bytes&quot;
+		},
+		&quot;use_functions&quot;: true
+		},
+		&quot;functions&quot;: {
+		&quot;invocations&quot;: {
+			&quot;unlimited&quot;: true,
+			&quot;unit&quot;: &quot;requests&quot;
+		},
+		&quot;runtime&quot;: {
+			&quot;unlimited&quot;: true,
+			&quot;unit&quot;: &quot;seconds&quot;
+		}
+		}
+	},
+	&quot;committer&quot;: &quot;cfjedimaster&quot;,
+	&quot;skipped_log&quot;: null,
+	&quot;manual_deploy&quot;: false,
+	&quot;file_tracking_optimization&quot;: true,
+	&quot;plugin_state&quot;: &quot;success&quot;
+}
+</code></pre>
+<p>That's a lot of data, but I can see what I need, published_at and deploy_time. I also think the summary messages are useful too. With that in mind, I built this relatively simple function to email me those details:</p>
+<pre><code class="language-js">const SG_KEY = process.env.SENDGRID;
+
+const helper = require('sendgrid').mail;
+
+exports.handler = async (event, context) =&gt; {
+  try {
+
+    console.log('deploy succeeded run!');
+    let pubData = JSON.parse(event.body).payload;
+    let body = `
+Deploy Succeeded for ${pubData.name} (${pubData.url})
+
+Build Title: ${pubData.title}
+Finished:    ${pubData.published_at}
+Duration:    ${toMinutes(pubData.deploy_time)}
+    `;
+
+    if(pubData.summary &amp;&amp; pubData.summary.messages) {
+      body += `
+Messages:`;
+      pubData.summary.messages.forEach(msg =&gt; {
+        body += `
+
+[${msg.type}] ${msg.title}
+${msg.description}`;
+      });
+    }
+
+    await sendEmail(body, 'Netlify Build Succeeded', 'raymondcamden@gmail.com', 'raymondcamden@gmail.com');
+
+  } catch (err) {
+    console.log('error handler for function ran', err.toString());
+    return { statusCode: 500, body: err.toString() }
+  }
+}
+
+function toMinutes(s) {
+	if(s &lt; 60) return `${s} seconds`;
+	let minutes = (s - (s % 60)) / 60;
+	return `${minutes}m ${s%60}s`;
+}
+
+async function sendEmail(body, subject, from, to) {
+  let mailContent = new helper.Content('text/plain', body);
+  let from_email = new helper.Email(from);
+  let to_email = new helper.Email(to);
+  let mail = new helper.Mail(from_email, subject, to_email, mailContent);
+  let sg = require('sendgrid')(SG_KEY);
+
+  let request = sg.emptyRequest({
+    method: 'POST',
+    path: '/v3/mail/send',
+    body: mail.toJSON()
+  });
+
+  return new Promise((resolve, reject) =&gt; {
+    sg.API(request, function(error, response) {
+      resolve(true);
+      if(error) {
+        console.log(JSON.stringify(error.response));
+        reject(error.response.body);
+      }
+    });
+  });
+}
+</code></pre>
+<p>I start off creating a <code>body</code> string that includes the bits I care about. I wrote a <code>toMinutes</code> function that pretty much mimics how Netlify itself renders build durations. I then pass this off to SendGrid to handle the mail. One thing I wish Netlify has that <a href="https://pipedream.com">Pipedream</a> does is a simple way to &quot;mail the owner&quot;. Ie I would love to do:</p>
+<pre><code class="language-js">$mail(body);
+</code></pre>
+<p>And it would simply send it to the email address on file for the current site. And here's an example of the result:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/netlify2.png" alt="Email sample" class="lazyload imgborder imgcenter">
+</p>
+<p>By the way, &quot;Build Title&quot; is driven by the Git commit message and will be &quot;null&quot; in a manual build. I could support that in my email so it looks nicer, but I'm fine with &quot;null&quot;.  You can find the code for the function, and the rest of my site, up on GitHub: <a href="https://github.com/cfjedimaster/raymondcamden2020">https://github.com/cfjedimaster/raymondcamden2020</a>.</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

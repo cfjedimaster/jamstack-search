@@ -1,0 +1,98 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Building a Vue Application with Serverless on Netlify</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Building a Vue Application with Serverless on Netlify</h2>
+<p>
+Written: 7/6/2020
+</p>
+
+
+<p>This is something that is - surely - documented in a thousand other blog posts, but it's not something I've tried yet
+with Netlify so I thought I'd give it a go. It was this or watch another episode of &quot;Unsolved Mysteries&quot; on Netflix and obviously I chose this instead. I'm glad I did because it worked surprisingly well with no real hiccups. I just needed to
+&quot;see&quot; it myself at least once to be sure it worked.</p>
+<p>Alright, so as the title says, how would you deploy a Vue.js application to Netlify while also making use of their serverless platform? Here's how I did it.</p>
+<p>First, I made the Vue application:</p>
+<pre><code>vue create vue-netlify-demo -b
+</code></pre>
+<p>If you've not seen the <code>-b</code> option before, it means &quot;bare&quot; and generates a much smaller Vue application with less boilerplate text. (In my opinion it could be even more bare, but I'll take what I can get.) I didn't change any options because I wasn't worried about testing Vuex or the router.</p>
+<p>I then fired up the application with <code>npm run serve</code> and confirmed it worked.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/vn1.jpg" alt="Vue bare app" class="lazyload imgborder imgcenter">
+</p>
+<p>Next, I started using the <code>netlify dev</code> command. This enables you to test local applications as if they were running on the Netlify platform. I noticed that <code>netlify dev</code> ran <code>npm run serve</code>, but I don't remember that being documented. It was the first script defined in my package.json file and so maybe that's why it fired, but I went with a more specific command: <code>netlify dev -c &quot;npm run serve&quot;</code>. The <code>-c</code> flag specifies the command for the CLI to run.</p>
+<p>I noticed that the output that was much more verbose when running via <code>netlify dev</code>. When you use <code>npm run serve</code>, there's a lot of webpack related messages that gets output to one line, constantly being overwritten. It's a lot of noise so I'm fine with that. But when running via <code>netlify dev</code>, they all get output to the screen. This is fine, but you may miss the message stating that the server is up and running:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/vn2.jpg" alt="Netlify dev message hidden amongst log messages" class="lazyload imgborder imgcenter">
+</p>
+<p>Once I saw this message and opened my browser to localhost:8888 I didn't worry about it again. Cool, now let's go serverless.</p>
+<p>First, I added a <code>netlify.toml</code> file to my project to specify my functions folder:</p>
+<pre><code>[build]
+	functions = &quot;.functions&quot;
+</code></pre>
+<p>I then used the CLI to scaffold a hello-world function: <code>netlify functions:create</code>. This laid down this file in <code>.functions/hello-world/hello-world.js</code>:</p>
+<pre><code class="language-js">// Docs on event and context https://www.netlify.com/docs/functions/#the-handler-method
+exports.handler = async (event, context) =&gt; {
+  try {
+    const subject = event.queryStringParameters.name || 'World'
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: `Hello ${subject}` }),
+      // // more keys you can return:
+      // headers: { &quot;headerName&quot;: &quot;headerValue&quot;, ... },
+      // isBase64Encoded: true,
+    }
+  } catch (err) {
+    return { statusCode: 500, body: err.toString() }
+  }
+}
+</code></pre>
+<p>The Netlify Dev environment supports testing serverless functions locally so I modified my little one page Vue application like so:</p>
+<pre><code class="language-html">&lt;template&gt;
+  &lt;div id=&quot;app&quot;&gt;
+    &lt;h1&gt;Welcome to Your Vue.js App&lt;/h1&gt;
+    &lt;p&gt;
+	Message from severless function: {{ msg }}
+    &lt;/p&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  data() {
+    return {
+      msg:''
+    }
+  },
+  async created() {
+    let resp = await fetch('/.netlify/functions/hello-world?name=ray');
+    this.msg = (await resp.json()).message;
+  }
+}
+&lt;/script&gt;
+</code></pre>
+<p>All I've done here is fire off a call to the function (the <code>.netlify/functions</code> path is how you &quot;address&quot; serverless functions on Netlify) and displayed the result. Here's how it looks:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/vn3.jpg" alt="Vue application calling the function" class="lazyload imgborder imgcenter">
+</p>
+<p>Beautiful, right? Now to get it live. First, I made a new repo for it: <a href="https://github.com/cfjedimaster/vue-netlify-demo">https://github.com/cfjedimaster/vue-netlify-demo</a>. Then I made a Netlify site tied to the GitHub repo. I specified <code>npm run build</code> to generate the Vue production version of the app and entered <code>dest</code> for the folder to use as the site source.</p>
+<p>And that was it. You can see it running here: <a href="https://vue-netlify-demo.netlify.app/">https://vue-netlify-demo.netlify.app/</a>. And don't forget I linked to the repo right above.</p>
+<p>So all in all - no surprises - it just plain worked - which is exactly what I want!</p>
+<p><span>Photo by <a href="https://unsplash.com/@jplenio?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Johannes Plenio</a> on <a href="https://unsplash.com/s/photos/view?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

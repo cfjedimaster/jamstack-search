@@ -1,0 +1,66 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Dynamic Short URLs with Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Dynamic Short URLs with Eleventy</h2>
+<p>
+Written: 6/22/2021
+</p>
+
+
+<p>One feature that some CMS systems have is the ability to handle short URLs that map to pages on the site. I'm not talking about services like TinyURL, but internal systems specific to a site. So for example, Adobe.com supports &quot;go&quot; URLs where you can go to this url: <a href="https://adobe.com/go/coldfusion">https://adobe.com/go/coldfusion</a> and it maps to <a href="https://www.adobe.com/products/coldfusion-family.html">https://www.adobe.com/products/coldfusion-family.html</a>. I decided to see if I could implement this with Eleventy. My demo is using Netlify but in theory could work anywhere that lets you specify redirects via a file.</p>
+<p>So, first off, if you want a simple hard coded system for handling redirects like this, you can simply edit your <code>_redirects</code> file and specify your aliases. So for example:</p>
+<pre><code>/go/cats	/documentation/animals/cats
+</code></pre>
+<p>While this format is pretty simple and a non-technical person could probably handle that just fine, what I wanted to create was a system where the page itself could define it's redirect. So for example, I've got a page located at <code>/docs/gettingstarted.md</code>. Here's the contents:</p>
+<pre><code class="language-html">---
+layout: main
+title: Getting Started
+go: gs
+---
+
+This is the Getting Started page.
+</code></pre>
+<p>In this page, I defined a front matter variable, <code>go</code>, that defines the alias for this particular page. So how did I make this work?</p>
+<p>Before I show how, let me quickly thank <a href="https://twitter.com/zachleat">Zach Leatherman</a> for this solution. My initial version worked but his idea made my code much simpler. I begin by first creating a custom collection that contains every page with a <code>go</code> value:</p>
+<pre><code class="language-js">eleventyConfig.addCollection(&quot;goPages&quot;, collectionApi =&gt; {
+	return collectionApi.getAll().filter(p =&gt; {
+		if(p.data.go) return true;
+		return false;
+	});
+});
+</code></pre>
+<p>This new collection, <code>goPages</code>, can then be used in my redirects file. Netlify requires it to be named <code>_redirects</code>, but remember that Elevently lets you output to anything, so I created <code>_redirects.liquid</code>:</p>
+<pre><code>---
+permalink: /_redirects
+---
+
+#old home page
+/home / 301
+
+{% for page in collections.goPages %}
+/go/{{ page.data.go }}	{{ page.url }}
+{% endfor %}
+
+</code></pre>
+<p>Notice I've got &quot;regular&quot; redirects on top and then my custom ones output beneath. The important bits are the <code>permalink</code> setting which writes to the right place for Netlify and then the loop over <code>goPages</code>. All I do is map the alias provides in the front matter to the 'real' URL.</p>
+<p>I saved this demo in my Eleventy demos repo here (<a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/gourls">https://github.com/cfjedimaster/eleventy-demos/tree/master/gourls</a>) and deployed it to Netlify here: <a href="https://gourltest.netlify.app/">https://gourltest.netlify.app/</a>. You can test the alias by going here: <a href="https://gourltest.netlify.app/go/gs">https://gourltest.netlify.app/go/gs</a>. To be fair, it isn't that much shorter than the real URL, but for a larger site with more nested subdirectories, it could be a handy shorthand. Personally, I love how I can set this up from the content page itself.</p>
+<p>This could be nicer. For example, I could support passing a list of creating one redirect for each value. Also, I could see building a shortcode such that when run, it either returns the alias version if it exists or just the regular URL. Anyway, let me know if this is helpful!</p>
+<p>Photo by <a href="https://unsplash.com/@soymeraki?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Javier Allegue Barros</a> on <a href="https://unsplash.com/s/photos/directions?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

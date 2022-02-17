@@ -1,0 +1,157 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Supporting Multiple Authors in an Eleventy Blog</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Supporting Multiple Authors in an Eleventy Blog</h2>
+<p>
+Written: 8/23/2020
+</p>
+
+
+<p>Here's a quick tip on how you could build an <a href="https://www.11ty.dev/">Eleventy</a> blog supporting multiple authors. By that I mean have a blog where every post
+is assigned an author with links to a unique profile page. If you just want to see the final result, the repository is here (<a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/multiauthor">https://github.com/cfjedimaster/eleventy-demos/tree/master/multiauthor</a>) and the live demo is here - <a href="https://admiring-fermi-e83d2d.netlify.app/">https://admiring-fermi-e83d2d.netlify.app/</a>.</p>
+<p>Alright, so let's start off with a simple Eleventy blog. It's got a home page that lists items from a post collection:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+&lt;h1&gt;Posts&lt;/h1&gt;
+
+&lt;ul&gt;
+{% for post in collections.post %}
+&lt;li&gt;&lt;a href=&quot;{{post.url}}&quot;&gt;{{post.data.title}}&lt;/a&gt;&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>And is driven by four blog posts that look basically like this:</p>
+<pre><code class="language-html">---
+title: Alpha Post
+layout: main
+date: 2020-08-02
+tags: post
+---
+
+This is Alpha
+</code></pre>
+<p>I'll skip sharing the layout as it's a basic Bootstrap template. But this is enough to get started. I can hit the home page and click to visit any of the four posts. Now let's start talking about author support.</p>
+<p>I began by creating a new file in my <code>_data</code> folder named <code>authors.json</code>. For my demo, I decided each author would have:</p>
+<ul>
+<li>A name (self-explanatory)</li>
+<li>A bio (text about the author)</li>
+<li>A link to their website</li>
+<li>A link to their photo</li>
+<li>Their Twitter username</li>
+</ul>
+<p>Certainly more could be done, like including a GitHub profile or LinkedIn. I also realized I was going to need a way to link posts to individual authors. While most likely the name values would be unique, I wanted to make it simpler. So for each author I defined a <code>key</code> value that was simply a unique code based on their name. Here's the data I'm using for my demo.</p>
+<pre><code class="language-js">[
+	{
+		&quot;key&quot;:&quot;rcamden&quot;,
+		&quot;name&quot;:&quot;Raymond Camden&quot;,
+		&quot;bio&quot;: &quot;Raymond likes cats.&quot;,
+		&quot;website&quot;:&quot;https://www.raymondcamden.com&quot;,
+		&quot;photo&quot;:&quot;https://static.raymondcamden.com/images/ray2019c.jpg&quot;,
+		&quot;twitter&quot;:&quot;raymondcamden&quot;
+	},
+	{
+		&quot;key&quot;:&quot;brinaldi&quot;,
+		&quot;name&quot;:&quot;Brian Rinaldi&quot;,
+		&quot;bio&quot;:&quot;Brian something something or another.&quot;,
+		&quot;website&quot;:&quot;https://remotesynthesis.com/&quot;,
+		&quot;photo&quot;:&quot;https://miro.medium.com/fit/c/400/400/2*k9h7ypAlAlA7PvOUjwbejA.jpeg&quot;,
+		&quot;twitter&quot;:&quot;remotesynth&quot;
+	}
+]
+</code></pre>
+<p>Cool, so this gives us access to author data in our Eleventy pages. I want to include the author on blog posts as well as create unique author pages. Let's first get the blog posts updated. To keep it simple, I built a new layout file for my blog posts and switched all of them to use this in their front matter:</p>
+<pre><code>layout: post
+</code></pre>
+<p>The <code>post</code> layout looks like so:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+&lt;h2&gt;{{ title }}&lt;/h2&gt;
+{% if author %}
+	{% assign myAuthor = authors | getAuthor: author %}
+
+	&lt;p&gt;
+	Written by &lt;a href=&quot;/authors/{{ author }}&quot;&gt;{{ myAuthor.name }}&lt;/a&gt;
+	&lt;/p&gt;
+{% endif %}
+
+{{ content }}
+</code></pre>
+<p>Notice that I don't assume every post has an author, and it's feasible that on a site with many authors some posts may be more 'housekeeping' in nature and not really attributed to a specific person. If I do have an author value, I need to get information about the author. To do so, I created a filter, <code>getAuthor</code>, that accepts two parameters - all of the authors and the key. Why do I have to pass authors in? Because Eleventy custom filters don't have access either global data or collection values. Here's how the filter is defined in <code>.eleventy.js</code>:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getAuthor&quot;, (authors,label) =&gt; {
+	let author = authors.filter(a =&gt; a.key === label)[0];
+	return author;
+});
+</code></pre>
+<p>As this returns the entire author object, I can use it in the text of my post layout. I use the key as a URL safe destination for the profile page and then display their name. This creates the link you see here:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/08/eam1.png" alt="A blog post with the author name and link." class="lazyload imgborder imgcenter">
+</p>
+<p>For the author pages, I used the incredibly awesome Eleventy feature that lets you create <a href="https://www.11ty.dev/docs/pages-from-data/">pages from data</a>. I defined my author page like so:</p>
+<pre><code class="language-html">---
+layout: main
+pagination:
+   data: authors
+   size: 1
+   alias: author
+permalink: &quot;/authors/{{author.key}}/&quot;
+eleventyComputed:
+   title: &quot;{{author.name}}&quot;
+---
+
+&lt;h2&gt;{{ author.name }}&lt;/h2&gt;
+
+&lt;p&gt;
+Website: &lt;a href=&quot;{{author.website}}&quot; target=&quot;_new&quot;&gt;{{author.website}}&lt;/a&gt;&lt;br/&gt;
+Twitter: &lt;a href=&quot;https://twitter.com/{{author.twitter}}&quot; target=&quot;_new&quot;&gt;@{{author.twitter}}&lt;/a&gt;
+&lt;/p&gt;
+
+&lt;img src=&quot;{{author.photo}}&quot; style=&quot;float:left; max-height: 300px; padding-right: 10px&quot;&gt;
+&lt;p&gt;
+{{author.bio}}
+&lt;/p&gt;
+
+&lt;br clear=&quot;left&quot; /&gt;
+
+&lt;h2&gt;Posts by Author&lt;/h2&gt;
+
+{% assign posts = collections.post | getPostsByAuthor: author.key %}
+&lt;ul&gt;
+{% for post in posts %}
+	&lt;li&gt;&lt;a href=&quot;{{post.url}}&quot;&gt;{{post.data.title}}&lt;/a&gt;&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>From the top, you'll see the pagination aspect handles making one page per author. Next, I specify the permalink to match what I was using in the post layout. The next part may be a weird looking, but in order to get Eleventy to set page data that's dynamic based on the pagination, I have to use <code>eleventyComputed</code>. To be honest that feature still kinda confuses me but I only ever run into needing it in cases like this.</p>
+<p>After the front matter I simply display the author (using all of my fine design skills) and then list out their posts. To get them, I use another filter, <code>getPostsByAuthor</code>. You can see it here:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getPostsByAuthor&quot;, (posts,author) =&gt; {
+	return posts.filter(a =&gt; a.data.author === author);
+});
+</code></pre>
+<p>Here's a sample author page:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/08/eam2.png" alt="A sample author page showing their info, picture, and lists of poss" class="lazyload imgborder imgcenter">
+</p>
+<p>And that's it. You could certainly do more. Don't forget that front matter supports setting multiple values for a particular key, so you could even support posts written by more than one author. You could also build out individual RSS feeds for unique authors if you choose. Again, the repository for this demo is at <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/multiauthor">https://github.com/cfjedimaster/eleventy-demos/tree/master/multiauthor</a> and the live version may be visited at <a href="https://admiring-fermi-e83d2d.netlify.app/">https://admiring-fermi-e83d2d.netlify.app/</a>. Let me know if you have any questions, or suggestions, about this approach!</p>
+<p><span>Photo by <a href="https://unsplash.com/@hudsonhintze?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Hudson Hintze</a> on <a href="https://unsplash.com/s/photos/group-of-people?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

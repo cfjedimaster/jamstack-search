@@ -1,0 +1,173 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Let's Make Everyone a Queen!</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Let's Make Everyone a Queen!</h2>
+<p>
+Written: 5/14/2020
+</p>
+
+
+<p>Forgive the somewhat over the top title. For a while now I've been meaning to make an application with a nifty little JavaScript library called <a href="https://www.brightspiral.com/">Tracery</a>. Tracery is a library created by <a href="http://www.galaxykate.com/">Kate Compton</a>. It's a fascinating tool for generating text based on a set of inputs. I saw fascinating because sometimes it makes some pretty incredible little stories. For example:</p>
+<blockquote>
+<p>
+This is a story about a faceless man. You know, the faceless man who hardly ever crys when they feel the forest. Well, I was listening to the faceless man, when we both saw this tree. Blinking, orange...well, more of a blueish white. We backed away because as everybody knows, trees don't exist. That was the last we saw of it. And now, the weather.
+</p>
+<p>
+Music plays. You recall summertime and pain. You recall a lover and a friend. Operatic folk harpsichord echoes out into dissonance.
+</p>
+<p>
+You know, I miss the tree. It was pretty terrible. I mean, really beautiful, for a tree. Eventually, I hope it comes back. We'll see it, glistening, grey...well, more of an indigoish indigo. But it'll be back. I mean, eventually. If not, it's just so bewildering.
+</p>
+</blockquote>
+<p>So yes, that's a bit crazy at times. But there's something interesting about it. If you <a href="https://www.brightspiral.com/">reload the site</a> you'll see new random generated stories and I could spend <em>quite</em> a bit of time seeing what it does.</p>
+<p>I first becamse of aware of this library when I discovered [@dragonhoards](https://twitter.com/dragonhoards] on Twitter. This is a bit that makes use of the library. Here's an example tweet that's both interesting and horifying at the same time:</p>
+<blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr">A magical dragon lives by an enchanted lake. She estimates her hoard, which consists of a heap of memoirs, a group of pies, and an unknowable amount of corpses. She is exhausted.</p>&mdash; Dragon Hoards (@dragonhoards) <a href="https://twitter.com/dragonhoards/status/1261003706507628544?ref_src=twsrc%5Etfw">May 14, 2020</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<p>At the simplest level, Tracery works by combining different arrays of input values. So for example, given this input:</p>
+<pre><code class="language-js">let input = {
+	&quot;sentence&quot;: [&quot;The #color# #animal# of the #natureNoun# is called #name#&quot;],	
+	&quot;color&quot;: [&quot;orange&quot;,&quot;blue&quot;,&quot;white&quot;,&quot;black&quot;,&quot;grey&quot;,&quot;purple&quot;,&quot;indigo&quot;,&quot;turquoise&quot;],
+	&quot;animal&quot;: [&quot;unicorn&quot;,&quot;raven&quot;,&quot;sparrow&quot;,&quot;scorpion&quot;,&quot;coyote&quot;,&quot;eagle&quot;,&quot;owl&quot;,&quot;lizard&quot;,&quot;zebra&quot;,&quot;duck&quot;,&quot;kitten&quot;],
+	&quot;natureNoun&quot;: [&quot;ocean&quot;,&quot;mountain&quot;,&quot;forest&quot;,&quot;cloud&quot;,&quot;river&quot;,&quot;tree&quot;,&quot;sky&quot;,&quot;sea&quot;,&quot;desert&quot;],
+	&quot;name&quot;: [&quot;Arjun&quot;,&quot;Yuuma&quot;,&quot;Darcy&quot;,&quot;Mia&quot;,&quot;Chiaki&quot;,&quot;Izzi&quot;,&quot;Azra&quot;,&quot;Lina&quot;]
+}
+</code></pre>
+<p>You can generate a random sentence like so:</p>
+<pre><code class="language-js">grammar = tracery.createGrammar(input);
+let sentence = grammar.flatten('#origin#');
+</code></pre>
+<p>The code starts with sentence and looks for tokens. For each token it will look for a corresponding array of values and select a random one. Here's an example result:</p>
+<pre><code>The turquoise lizard of the river is called Mia
+</code></pre>
+<p>That part is relatively simple, but Tracery gets very complex. So for example, it supports picking a random animal once and re-using the same value again if you need it. Honestly the complexity goes beyond what I think I can understand currently, but she's got a great testing utility you can play with here: <a href="http://www.crystalcodepalace.com/traceryTut.html">http://www.crystalcodepalace.com/traceryTut.html</a>. And of course, it's up on GitHub: <a href="https://github.com/galaxykate/tracery">https://github.com/galaxykate/tracery</a>. Note that you want to make use of the <a href="https://github.com/galaxykate/tracery/tree/tracery2">tracery2</a> branch, not master.</p>
+<p>Ok, so with that being said, I thought it would build a few demos with this.</p>
+<h3>The Web Site</h3>
+<p>As I said, Tracery is powerful, but complex. While I had a end game in mind (the second demo I'll be showing), I thought it would make sense to start with a web site first to keep it simple. As the title of this post suggests, it's all about making you a queen. I had my daughters in mind but anyone can be a queen if they want. Here's the end result:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/q1.png" alt="Queen Of" class="lazyload imgborder imgcenter">
+</p>
+<p>You can demo this yourself here: <a href="https://queenof.netlify.app/#Lindy">https://queenof.netlify.app/#Lindy</a> Notice I've included the name in the URL. You can change the hash mark to whatever, or just type whatever you want in the form field. The basic pattern is relatively simple: X is the queen of A, something of B, and something else of C. It's built using Vue.js because of course I'd use Vue for this. Here's the code:</p>
+<pre><code class="language-js">const input = {
+	&quot;things&quot;:[&quot;Shadows&quot;,&quot;Night&quot;,&quot;the Sea&quot;,&quot;the Moon&quot;,&quot;Stars&quot;,
+				&quot;the Sun&quot;,&quot;Kittens&quot;,&quot;Fear&quot;,&quot;Courage&quot;,&quot;Dancing&quot;,
+				&quot;the Internet&quot;,&quot;Unicorns&quot;,&quot;Dolphins&quot;,&quot;Mermaids&quot;,&quot;Upstairs&quot;,
+				&quot;Foxes&quot;,&quot;Puppies&quot;,&quot;Chairs&quot;,&quot;Trees&quot;,&quot;Plants&quot;,
+				&quot;Flowers&quot;,&quot;Music&quot;,&quot;Singing&quot;,&quot;Painting&quot;,&quot;Song&quot;,
+				&quot;Sparkles&quot;,&quot;Jewels&quot;,&quot;Intelligence&quot;,&quot;Smarts&quot;,&quot;Dragons&quot;,
+				&quot;Wolves&quot;,&quot;Shoes&quot;,&quot;Bravery&quot;,&quot;Honesty&quot;,&quot;Empathy&quot;,
+				&quot;Compassion&quot;,&quot;Wisdon&quot;,&quot;Knowledge&quot;,&quot;Cats&quot;,&quot;Storms&quot;,
+				&quot;Lightning&quot;,&quot;Thunder&quot;,&quot;Rain&quot;,&quot;Snow&quot;,&quot;Clouds&quot;,
+				&quot;Wind&quot;,&quot;the Earth&quot;,&quot;the Universe&quot;,&quot;the Galaxy&quot;,&quot;the Piano&quot;,
+				&quot;the Sky&quot;,&quot;the Land&quot;,&quot;the Realm&quot;,&quot;the oceans&quot;,&quot;cookies&quot;,
+				&quot;cakes&quot;,&quot;pies&quot;,&quot;macarons&quot;,&quot;pizza&quot;,&quot;parties&quot;],
+	&quot;role&quot;:[&quot;Defender&quot;,&quot;Champion&quot;,&quot;Scion&quot;,&quot;Empress&quot;,&quot;Sorceress&quot;,
+			&quot;Master&quot;,&quot;Mistress&quot;,&quot;Boss&quot;,&quot;CEO&quot;,&quot;President&quot;,
+			&quot;Prime Minister&quot;,&quot;DJ&quot;,&quot;Knight&quot;,&quot;Dame&quot;,&quot;Duchess&quot;,
+			&quot;Baroness&quot;,&quot;Countess&quot;,&quot;Manager&quot;,&quot;Singer&quot;,&quot;Drummer&quot;,
+			&quot;Muse&quot;,&quot;Siren&quot;,&quot;Painter&quot;,&quot;Crafter&quot;,&quot;Creator&quot;,
+			&quot;Accountant&quot;,&quot;Chancellor&quot;,&quot;Jedi&quot;,&quot;Teacher&quot;,&quot;Jedi Master&quot;,
+			&quot;Tutor&quot;],
+	&quot;origin&quot;:[&quot; is the Queen of #things#, #role# of #things#, and #role# of #things#.&quot;]
+};
+
+const app = new Vue({
+	el:'#app',
+	data: {
+		grammar:null,
+		name:'',
+		result:''
+	},
+	methods:{
+		makeQueen() {
+			if(this.name === '') return;
+			this.result = this.name + grammar.flatten('#origin#');
+			window.location.hash = this.name;
+		}
+	},
+	mounted() {
+		grammar = tracery.createGrammar(input);
+		grammar.addModifiers(baseEngModifiers);
+		if(window.location.hash &amp;&amp; window.location.hash.length &gt; 1) {
+			//remove # 
+			this.name = window.location.hash.substring(1);
+			this.makeQueen();
+		}
+	}
+});
+</code></pre>
+<p>The crucial bits are the <code>origin</code> value as that forms the basic structure of the random sentence. I leave off the beginning because that will be the name. The VUe parts then are pretty trivial. Setup Tracery and wait for you to enter a value (although note that <code>mounted</code> will notice the hash).</p>
+<p>If you want, you can peruse the entire code base here: <a href="https://github.com/cfjedimaster/queenof">https://github.com/cfjedimaster/queenof</a></p>
+<h3>The Twitter Bot</h3>
+<p>So as I said, I had an endgame and mind, and that was a Twitter bot. I've got something of a problem when it comes to creating Twitter bots, but I'm sure I got stop whenever I want to. Using <a href="https://pipedream.com/">Pipedream</a>, I built a Twitter bot at <a href="https://twitter.com/generatorqueen">@generatorqueen</a>. She works rather simply. Send her a tweet with &quot;queen me&quot; in the text and you'll get a response within a minute.</p>
+<blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr">You are the Queen of the Earth, Chancellor of Smarts, and Creator of Plants.</p>&mdash; Queen Generator (@GeneratorQueen) <a href="https://twitter.com/GeneratorQueen/status/1261367197315686401?ref_src=twsrc%5Etfw">May 15, 2020</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<p>I built this using a Pipedream workflow you can find here: <a href="https://pipedream.com/@raymondcamden/queen-of-bot-v2-p_MOCQen/edit">https://pipedream.com/@raymondcamden/queen-of-bot-v2-p_MOCQen/edit</a>. Don't forget that one of the coolest features of Pipedream is that you can share workflows with others so they can fork and use for their own purposes! Let's break down the workflow bits.</p>
+<p>I began with a Twitter search event source. I <a href="https://www.raymondcamden.com/2020/05/07/looking-at-pipedreams-event-sources">blogged</a> about these last week. They are a powerful way to build event driven workflows. In this case the event source is simply a Tweet that matches &quot;@generatorqueen&quot;.</p>
+<p>Next I have a custom Node.js step to do validation on the text:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	if(steps.trigger.event.full_text.indexOf('queen me') === -1) $end('queen me not in tweet');
+}
+</code></pre>
+<p>Remember that <code>$end</code> is Pipedream's way of letting you end a workflow early.</p>
+<p>The next step generates the text:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	const tracery = require('tracery-grammar');
+
+	const grammar = tracery.createGrammar({
+			&quot;things&quot;:[&quot;Shadows&quot;,&quot;Night&quot;,&quot;the Sea&quot;,&quot;the Moon&quot;,&quot;Stars&quot;,
+					&quot;the Sun&quot;,&quot;Kittens&quot;,&quot;Fear&quot;,&quot;Courage&quot;,&quot;Dancing&quot;,
+					&quot;the Internet&quot;,&quot;Unicorns&quot;,&quot;Dolphins&quot;,&quot;Mermaids&quot;,&quot;Upstairs&quot;,
+					&quot;Foxes&quot;,&quot;Puppies&quot;,&quot;Chairs&quot;,&quot;Trees&quot;,&quot;Plants&quot;,
+					&quot;Flowers&quot;,&quot;Music&quot;,&quot;Singing&quot;,&quot;Painting&quot;,&quot;Song&quot;,
+					&quot;Sparkles&quot;,&quot;Jewels&quot;,&quot;Intelligence&quot;,&quot;Smarts&quot;,&quot;Dragons&quot;,
+					&quot;Wolves&quot;,&quot;Shoes&quot;,&quot;Bravery&quot;,&quot;Honesty&quot;,&quot;Empathy&quot;,
+					&quot;Compassion&quot;,&quot;Wisdon&quot;,&quot;Knowledge&quot;,&quot;Cats&quot;,&quot;Storms&quot;,
+					&quot;Lightning&quot;,&quot;Thunder&quot;,&quot;Rain&quot;,&quot;Snow&quot;,&quot;Clouds&quot;,
+					&quot;Wind&quot;,&quot;the Earth&quot;,&quot;the Universe&quot;,&quot;the Galaxy&quot;,&quot;the Piano&quot;,
+					&quot;the Sky&quot;,&quot;the Land&quot;,&quot;the Realm&quot;,&quot;the oceans&quot;,&quot;cookies&quot;,
+					&quot;cakes&quot;,&quot;pies&quot;,&quot;macarons&quot;,&quot;pizza&quot;,&quot;parties&quot;],
+			&quot;role&quot;:[&quot;Defender&quot;,&quot;Champion&quot;,&quot;Scion&quot;,&quot;Empress&quot;,&quot;Sorceress&quot;,
+					&quot;Master&quot;,&quot;Mistress&quot;,&quot;Boss&quot;,&quot;CEO&quot;,&quot;President&quot;,
+					&quot;Prime Minister&quot;,&quot;DJ&quot;,&quot;Knight&quot;,&quot;Dame&quot;,&quot;Duchess&quot;,
+					&quot;Baroness&quot;,&quot;Countess&quot;,&quot;Manager&quot;,&quot;Singer&quot;,&quot;Drummer&quot;,
+					&quot;Muse&quot;,&quot;Siren&quot;,&quot;Painter&quot;,&quot;Crafter&quot;,&quot;Creator&quot;,
+					&quot;Accountant&quot;,&quot;Chancellor&quot;,&quot;Jedi&quot;,&quot;Teacher&quot;,&quot;Jedi Master&quot;,
+					&quot;Tutor&quot;],
+			&quot;origin&quot;:[&quot;the Queen of #things#, #role# of #things#, and #role# of #things#.&quot;]
+	});
+
+	grammar.addModifiers(tracery.baseEngModifiers); 
+
+	this.sender = steps.trigger.event.user.screen_name;
+	this.message = '@' + this.sender + ' You are ' + grammar.flatten('#origin#');
+	console.log(this.message);
+}
+</code></pre>
+<p>Now, at this point, everything's been pretty simple. In theory the next step is to just use the &quot;Post Tweet&quot; action. I've used that before and it's one of the many built in actions at Pipedream. However, my buddy <a href="https://twitter.com/dylansather">Dylan Sather</a> at Pipedream noticed a potential issue with my use case. Because my bot would be replying to users, it was a potential TOS issue with Twitter's API. When you use Pipedream's Post Tweet action it's using Pipedream's application credentials for the call. It's using <em>your</em> authentication, but the lower level app itself is Pipedreams. Because of the potential for abuse, it would be problemtic to allow the Post Tweet action to &quot;at&quot; people in tweets. Luckily, the workaround was relatively simple.</p>
+<p>First, Pipedream created a new action that lets you use <em>your</em> credentials:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/q2.png" alt="New action for posting tweets" class="lazyload imgborder imgcenter">
+</p>
+<p>Once you've added this, you supply your own application credentials. You can get these simply enough at <a href="https://developer.twitter.com/en">https://developer.twitter.com/en</a> but note! If you've just today made the account for your bot, your bot itself needs to ask for permission to create Twitter apps. Twitter is totally fine with this, but there's an approval process. Mine took seven days. It's been a while since I've done this before so I can't tell you if that's slow or fast, but if you're planning something like this, you may want to request this as soon as possible.</p>
+<p>Once you've done that then it's a simple matter of copying your keys into the Pipedream action and then specifying what to tweet. Here's how I did it. (Note, the text in white is a sample value.)</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/q3.png" alt="Action values used for posting the tweet" class="lazyload imgborder imgcenter">
+</p>
+<p>I believe that this is only an issue for automation of tweets that are sent <em>to</em> users but again, the Pipedream side of this was simple. The only real issue was the week delay in getting the developer account approved.</p>
+<p><i>Header photo by <a href="https://unsplash.com/@glencarrie?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Glen Carrie</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

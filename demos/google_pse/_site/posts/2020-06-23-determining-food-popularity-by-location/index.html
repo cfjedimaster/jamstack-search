@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Determining Food Popularity By Location</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Determining Food Popularity By Location</h2>
+<p>
+Written: 6/22/2020
+</p>
+
+
+<p>This is typically the kind of post I've write up on <a href="https://developer.here.com/blog">HERE's blog</a>, but as I haven't blogged here in nearly two weeks, I figured I'm past due to share some content. As it stands, this is yet another one of my lame demos and nothing really serious, but I had fun building it and thought I'd share.</p>
+<p>One of the API's that HERE provides is involves <a href="https://developer.here.com/products/geocoding-and-search">searching</a> for POIs (points of interest) at a location. We provide two basic APIs for that. The first, <a href="https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-discover-brief.html">Discover</a> is useful for text queries, so for example, you remember dining at a place named &quot;Bob's&quot; something and you want to figure out exactly what it was. The other API, <a href="https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-browse-brief.html">Browse</a>, is better suited to category based searches, for example, finding all the banks near your current location.</p>
+<p>One of the things I really like about our search APIs is the <em>incredibly deep</em> <a href="https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics-places/introduction.html">categorization feature</a>. It's split into two versions, one that's generic and one that's based on types of food. The &quot;generic&quot; category API system goes very deep. So you can ask for &quot;nightlife-entertainment&quot; POIs, or more specifically a &quot;gambling, lottery, or betting&quot; establishment, or very precisely a casino.</p>
+<p>That type of specificity also exists on the food types side. You can go from Asian, to Chinese, to over <em>ten</em> types of different Chinese cuisine. I thought I was pretty familiar with Chinese food, but I was blown away by the different types of Chinese food I had never known even existed.</p>
+<h3>The First Demo</h3>
+<p>So given all of this, I thought it would be kind of food to examine the types of food options available to you. For my first demo, I used Geolocation to determine your position, and then I asked for 100 restaurants near you. From that, I aggregated the types of restaurants as well as the food types and built a report. Here's how I built it. First, the front end:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;div v-if=&quot;message&quot;&gt;
+    {{message}}
+  &lt;/div&gt;
+  &lt;div v-if=&quot;types&quot;&gt;
+    &lt;h2&gt;Types of Restaurants&lt;/h2&gt;
+    &lt;ul&gt;
+       &lt;li v-for=&quot;type of types&quot;&gt;
+         {{ type.name }} - {{ type.value }}
+      &lt;/li&gt;
+  &lt;/div&gt;
+  &lt;div v-if=&quot;foodTypes&quot;&gt;
+    &lt;h2&gt;Types of Food&lt;/h2&gt;
+    &lt;ul&gt;
+       &lt;li v-for=&quot;type of foodTypes&quot;&gt;
+         {{ type.name }} - {{ type.value }}
+      &lt;/li&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<p>This is fairly simple as all it does is show a loading message and then displays the food reports when done. The real magic is in the JavaScript. I'm going to share the entire CodePen below, so let me focus in on the important bits. First, my <code>created</code> event hook:</p>
+<pre><code class="language-js">  async created() {
+    this.message = 'Fetching location...';
+    this.location = await this.getLocation();
+    this.message = null;
+    this.results = await this.getFoodOptions();
+    this.types = this.sortToArray(this.generateRestaurantTypes(this.results));
+    this.foodTypes = this.sortToArray(this.generateFoodTypes(this.results));
+    console.log('got '+this.results.length+' items');
+
+  },
+</code></pre>
+<p>I get the user's location (just using the browser's geolocation API) and then start working on my data. Next, I fetch all of my restaurant options:</p>
+<pre><code class="language-js">async getFoodOptions() {
+	this.message = 'Getting food data for your location.';
+	let url = `https://discover.search.hereapi.com/v1/browse?apikey=${apikey}&amp;at=${this.location.latitude},${this.location.longitude}&amp;categories=100-1000-0000&amp;limit=100`;
+	let resp = await fetch(url);
+	let data = await resp.json();
+	this.message = '';
+
+	return data.items.map(m =&gt; {
+	let open = '';
+	let openHours = '';
+	if(m.openingHours &amp;&amp; m.openingHours.length &gt;= 1) {
+		open = m.openingHours[0].isOpen;
+		openHours = m.openingHours[0].text;
+	}
+	return {
+		title:m.title,
+		address:m.address,
+		position:m.position,
+		contacts:m.contacts,
+		open:open,
+		openHours:openHours,
+		categories:m.categories,
+		foodTypes:m.foodTypes
+	}
+	});
+},
+</code></pre>
+<p>For the most part, this is mainly just a call to the Browse API passing in the category ID we use for restaurants. Once I have my data I do a bit of manipulation and simplification. For example, setting up a top level <code>open</code> property. This comes from code I used in another demo and technically isn't even used in this demo.</p>
+<p>Once I have my data, I then build my two reports. First, on restaurant types:</p>
+<pre><code class="language-js">generateRestaurantTypes(items) {
+	let result = {};
+	for(i of items) {
+		for(c of i.categories) {
+		//ignore the generic
+		if(c.id !== '100-1000-0000') {
+			if(!result[c.name]) result[c.name] = 0;
+			result[c.name]++;
+		}
+		}
+	}
+	return result;
+},
+</code></pre>
+<p>You'll notice I ignore the top level type so I can focus on more specific types. Then I get my food types:</p>
+<pre><code class="language-js">generateFoodTypes(items) {
+	let result = {};
+	for(i of items) {
+		if(i.foodTypes) {
+		for(c of i.foodTypes) {
+			//only do the primary
+			if(c.primary) {
+			if(!result[c.name]) result[c.name] = 0;
+			result[c.name]++;
+			}
+		}
+		}
+	}
+	return result;
+	
+},
+</code></pre>
+<p>You'll notice I look for a <code>primary</code> flag on the data. Any restaurant returned will have multiple food types, but only one will be marked as primary. I can totally see removing this restriction as it may provide better, or at least different results.</p>
+<p>Both of the previous functions return simple JavaScript objects with the keys representing the name of the restauarant or food type and the value as the count. Both of these are passed to a simple utility function to return a sorted array.</p>
+<p>The final result, for my location:</p>
+<ul>
+<li>American - 24</li>
+<li>Pizza - 7</li>
+<li>Seafood - 6</li>
+<li>International - 5</li>
+<li>Italian - 5</li>
+<li>Sandwich - 5</li>
+<li>American - Cajun - 4</li>
+<li>American - Barbecue/Southern - 3</li>
+<li>Greek - 3</li>
+<li>Burgers - 3</li>
+<li>American - Californian - 2</li>
+<li>Thai - 2</li>
+<li>Bistro - 2</li>
+<li>Chicken - 2</li>
+<li>Chinese - 2</li>
+<li>Mexican - 2</li>
+<li>Natural/Healthy - 2</li>
+<li>Ice Cream - 2</li>
+<li>Brunch - 1</li>
+<li>Japanese - Sushi - 1</li>
+<li>Breakfast - 1</li>
+<li>Asian - 1</li>
+<li>French - 1</li>
+<li>Pastries - 1</li>
+</ul>
+<p>Some of this isn't surprising. While I live in the &quot;heart&quot; of the Cajun area, it's rare to find a proper &quot;Cajun&quot; restaurant. A lot of places will serve Cajun dishes, but not as their main attraction. I do think the Asian/Chinese numbers though are a bit low, as I can think of at least 5 off the top of my head.</p>
+<p>Check out the complete demo below:</p>
+<p class="codepen" data-height="265" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="XWXpWme" style="height: 265px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Food Report 1">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/XWXpWme">
+  Food Report 1</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<h3>Demo the Second</h3>
+<p>For the second demo, I wanted to kick it up a notch, mainly by making it easy to see what the food types look like in other areas. I start off with a full map of America (and that's my bias, I could use geolocation here and center on your location):</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/06/ft1.jpg" alt="Map centered on America" class="lazyload imgborder imgcenter">
+</p>
+<p>If you click on a location, I then get the data and report it.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/06/ft2.jpg" alt="Food report for Bellingham, WA" class="lazyload imgborder imgcenter">
+</p>
+<p>For the most part, this code isn't too difficult, except that I removed Vue.js and kept it vanilla. The front end is rather bare so I'll skip it (will share full code in a bit), so let's focus on the JavaScript. I begin with code handling displaying the map:</p>
+<pre><code class="language-js">// Obtain the default map types from the platform object:
+var defaultLayers = platform.createDefaultLayers();
+
+var map = new H.Map(
+	document.getElementById('mapContainer'),
+	defaultLayers.vector.normal.map,
+	{
+		zoom: 5,
+		center: { lat: 35.22, lng: -92.02 },
+		pixelRatio: window.devicePixelRatio || 1
+	}
+);
+
+var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+var ui = H.ui.UI.createDefault(map, defaultLayers);
+</code></pre>
+<p>This centers the map, sets a zoom, and adds touch support and basic UI controls. Next, I get some handlers to the DOM:</p>
+<pre><code class="language-js">let instructions = document.querySelector('#instructions');
+let result = document.querySelector('#result');
+</code></pre>
+<p>Now I add a touch handler for the map. It needs to figure out where you are and then get the data:</p>
+<pre><code class="language-js">map.addEventListener('tap', async evt =&gt; {
+
+		// hide once tapped
+		instructions.style.display = 'none';
+
+		let geom = map.screenToGeo(evt.currentPointer.viewportX, evt.currentPointer.viewportY);
+		let address = await reverseGeocode(geom);
+		console.log('address is '+address);	
+		let restaurants = await getRestaurants(geom);
+		//console.log('restaurants', restaurants);
+		//Note, we are NOT reporting on types in this demo, but I may bring it back.
+	   	let types = sortToArray(generateRestaurantTypes(restaurants));
+	    let foodTypes = sortToArray(generateFoodTypes(restaurants));
+		console.log(foodTypes);
+		let html = `
+&lt;h3&gt;Location: ${address}&lt;/h3&gt;
+
+&lt;b&gt;Most Popular Food Types:&lt;/b&gt;
+&lt;ul&gt;
+		`;
+		for(let i=0;i&lt;Math.min(foodTypes.length,10);i++) {
+			html += `
+			&lt;li&gt;${foodTypes[i].name}&lt;/li&gt;
+			`;
+		};
+		html += '&lt;/ul&gt;';
+		result.innerHTML = html;
+	});
+}
+</code></pre>
+<p>The tap event is passed location information which let's me use our <a href="https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-reverse-geocode-brief.html">Reverse Geocode API</a> to translate it into a proper named location. I just use this for the display.</p>
+<p>I then ask for my data. As the comment says, I did do reporting on types of restaurants like my first demo, but ended up not rendering it. I should remove it I guess. Both functions called here haven't changed. I then write out the report, maxed to ten entries.</p>
+<p>You can demo this here: <a href="https://cfjedimaster.github.io/heredemos/mapsjs/food.html">https://cfjedimaster.github.io/heredemos/mapsjs/food.html</a>. The full source code may be found here: <a href="https://github.com/cfjedimaster/heredemos/blob/master/mapsjs/food.js">https://github.com/cfjedimaster/heredemos/blob/master/mapsjs/food.js</a>.</p>
+<p>I've spent some time clicking around and I've got to say I find the results pretty fascinating. Let me know what you think by leaving me a comment below!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@foodiesfeed?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Jakub Kapusnak</a> on Unsplash</i></p>
+<p>cat food, this text is just here while I test some Algolia stuff. you may ignore. :)</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

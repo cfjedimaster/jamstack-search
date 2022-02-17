@@ -1,0 +1,93 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Sharing Your Movies with Pipedream and Letterboxd</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Sharing Your Movies with Pipedream and Letterboxd</h2>
+<p>
+Written: 8/3/2020
+</p>
+
+
+<p>I recently discovered <a href="https://letterboxd.com/">Letterboxd</a> via a cool example of integrating it's data with Eleventy (<a href="https://smithtimmytim.com/blog/2020/create-a-film-diary-with-eleventy-and-letterboxd/">&quot;Show Off Your Letterboxd Film Diary with Eleventy&quot;</a>). Letterboxd is a site (and app) that lets you track the movies you've watched and give reviews and ratings. I'm a huge fan of <a href="https://www.goodreads.com/">GoodReads</a> for keeping track of the books I've read and I'm going to give Letterboxd a try as well. My wife and I are both huge movie nerds so I thought it would be kind of cool to have a list of movies I've watched when the year finally ends.</p>
+<p>While there isn't a proper API yet (apparently it's in <a href="https://letterboxd.com/api-beta/">beta now</a>), every account has an RSS feed setup. Here's mine: <a href="https://letterboxd.com/raymondcamden/rss/">https://letterboxd.com/raymondcamden/rss/</a></p>
+<p>While we all know what RSS looks like (ok, maybe it's just me), Letterboxd has quite a few extensions to the specification that provide additional data about your films. Here's one entry (which is all I've got for now - I've told the site about a bunch of old movies I've watched but have only &quot;logged&quot; one review so far):</p>
+<pre><code class="language-xml">&lt;item&gt;
+&lt;title&gt;John Mulaney: Kid Gorgeous at Radio City, 2018 - ★★★★&lt;/title&gt;
+&lt;link&gt;https://letterboxd.com/raymondcamden/film/john-mulaney-kid-gorgeous-at-radio-city/&lt;/link&gt;
+&lt;guid isPermaLink=&quot;false&quot;&gt;letterboxd-watch-117795457&lt;/guid&gt;
+&lt;pubDate&gt;Wed, 5 Aug 2020 08:40:48 +1200&lt;/pubDate&gt;
+&lt;letterboxd:watchedDate&gt;2020-08-03&lt;/letterboxd:watchedDate&gt;
+&lt;letterboxd:rewatch&gt;No&lt;/letterboxd:rewatch&gt;
+&lt;letterboxd:filmTitle&gt;John Mulaney: Kid Gorgeous at Radio City&lt;/letterboxd:filmTitle&gt;
+&lt;letterboxd:filmYear&gt;2018&lt;/letterboxd:filmYear&gt;
+&lt;letterboxd:memberRating&gt;4.0&lt;/letterboxd:memberRating&gt;
+&lt;description&gt;&lt;![CDATA[ &lt;p&gt;&lt;img src=&quot;https://a.ltrbxd.com/resized/film-poster/4/5/0/3/1/5/450315-john-mulaney-kid-gorgeous-at-radio-city-0-500-0-750-crop.jpg?k=1f94664287&quot;/&gt;&lt;/p&gt; &lt;p&gt;Watched on Monday August 3, 2020.&lt;/p&gt; ]]&gt;&lt;/description&gt; &lt;dc:creator&gt;Raymond Camden&lt;/dc:creator&gt;
+&lt;/item&gt;
+</code></pre>
+<p>Everything with the <code>letterboxd:</code> prefix is a namespaced set of data that they've added to provide more information to the feed. Looking at this, and the blog entry I shared earlier, it occurred to me that it would be easy to build an integration between this and <a href="https://pipedream.com">Pipedream</a>. I got this working and you can see it below.</p>
+<blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr">I just watched John Mulaney: Kid Gorgeous at Radio City and rated it a 4.0. See my <br>review at <a href="https://t.co/4sPdaLTFeJ">https://t.co/4sPdaLTFeJ</a>.</p>&mdash; moonpicbot (@moonpicbot) <a href="https://twitter.com/moonpicbot/status/1290761974893219842?ref_src=twsrc%5Etfw">August 4, 2020</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<p>Notice - when I &quot;play&quot; like this, I use one of my bot accounts, not my main account. If I continue to use Letterboxd I'll update my workflow to post to my main account. Alright, so how was this built?</p>
+<p>The first step of my workflow was an RSS event source. I first wrote about Pipedream's <a href="https://www.raymondcamden.com/2020/05/07/looking-at-pipedreams-event-sources">event sources</a> back in May. It's a powerful way to build workflows built on custom events. One of the events built in is an RSS feed parser that runs every fifteen minutes and on a new RSS entry will emit an event. With this as the source of my workflow I've got a serverless function that will execute automatically whenever I do a new movie review. (Well, within fifteen minutes.)</p>
+<p>The next step was a custom Node step. I did two things in here. First, I wanted to get the URL of the image for the movie. In that blog entry I shared earlier, they used a npm package called <a href="https://www.npmjs.com/package/letterboxd">letterboxd</a>. This is a cool little package that abstracts away the complete logic of reading and parsing the RSS feed. But for me, the RSS feed was already parsed, I just needed the &quot;find the image logic&quot;.</p>
+<p>I went to the GitHub repo, opened up <a href="https://github.com/zaccolley/letterboxd/blob/master/index.js">index.js</a>, and found the <code>getImage</code> function. I took the logic from there and incorporated it into my Node step:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	const cheerio = require('cheerio');
+
+	/*
+	This logic taken from the https://github.com/zaccolley/letterboxd package. The package assumes it is doing
+	all the network stuff and I just needed the image parsing part.
+	*/
+	getImage = function(description) {
+		var $ = cheerio.load(description);
+
+		// find the film poster and grab it's src
+		var image = $('p img').attr('src');
+
+		// if the film has no image return no object
+		if (!image) {
+			return false;
+		}
+
+		return {
+			tiny: image.replace('-0-150-0-225-crop', '-0-35-0-50-crop'),
+			small: image.replace('-0-150-0-225-crop', '-0-70-0-105-crop'),
+			medium: image,
+			large: image.replace('-0-150-0-225-crop', '-0-230-0-345-crop')
+		};
+	}
+
+	let imgdata = getImage(steps.trigger.event.description);
+	let text = `
+I just watched ${steps.trigger.event['letterboxd:filmtitle']['#']} and rated it a ${steps.trigger.event[&quot;letterboxd:memberrating&quot;][&quot;#&quot;]}. See my 
+review at ${steps.trigger.event.link}.
+	`;
+
+	return {
+		text, imgdata
+	};
+
+}
+</code></pre>
+<p>The second thing I did was to simply write up the text I wanted to tweet. I used the custom values from the RSS feed to get the title and rating.</p>
+<p>By the way, make note of the use of <a href="https://www.npmjs.com/package/cheerio">cheerio</a> package. This is an awesome implementation of jQuery on the server and works really darn well for cases where you need to parse HTML as a string.</p>
+<p>So at this point, I've got images (multiple to pick from) and text. My plan was to tweet with the image so to do that you first need to upload the image. I picked the pre-built <code>upload_media_to_twitter</code> step where all I did was plugin my URL param: <code>steps.parseEntry.$return_value.imgdata.medium</code>.</p>
+<p>Lastly, I used the <code>post_tweet</code> step with two params: status was <code>steps.parseEntry.$return_value.text</code> and media ids was <code>steps.upload_media_to_twitter.$return_value</code>.</p>
+<p>And that's it. You can see the complete workflow here: <a href="https://pipedream.com/@raymondcamden/letterboxd-to-twitter-p_V9CVvK/">https://pipedream.com/@raymondcamden/letterboxd-to-twitter-p_V9CVvK/</a> As I mention every time, don't forget you can copy this workflow to your own Pipedream account and use it as you will. Enjoy!</p>
+<p><span>Photo by <a href="https://unsplash.com/@felixmooneeram?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Felix Mooneeram</a> on <a href="https://unsplash.com/s/photos/movie-theater?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

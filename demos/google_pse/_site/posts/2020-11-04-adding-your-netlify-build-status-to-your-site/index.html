@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Adding Your Netlify Build Status to Your Site</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Adding Your Netlify Build Status to Your Site</h2>
+<p>
+Written: 11/3/2020
+</p>
+
+
+<p>One of the cool little features Netlify has is the ability to add a &quot;build status&quot; graphic to your site. You can find this by logging on to your Netlify admin, going to your site settings, and scrolling to status badges:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/11/ntl1.jpg" alt="Netlify instructions for adding a status badge" class="lazyload imgborder imgcenter">
+</p>
+<p>And here's a live example, right in my blog post:</p>
+<p><a href="https://app.netlify.com/sites/raymondcamden/deploys"><img src="https://api.netlify.com/api/v1/badges/9727f051-52fd-4ae7-9128-a0812610ca69/deploy-status" alt="Netlify Status"></a></p>
+<p>This works well, but I was curious what it would take to have a more controlled way of displaying the build status. There's an API for returning build information: <a href="https://open-api.netlify.com/?_ga=2.224975322.1597224312.1604327763-452716213.1587404636#operation/listSiteDeploys">listSiteDeploys</a>. You can use this API with either a site ID or site domain, which means I can get a list of my deploys at this location:</p>
+<pre><code>https://api.netlify.com/api/v1/sites/www.raymondcamden.com/deploys
+</code></pre>
+<p>This returns an array of deploy results with the most recent being first. Here's an example of how that result looks (taken from their docs):</p>
+<pre><code class="language-js">[
+  {
+    &quot;id&quot;: &quot;string&quot;,
+    &quot;site_id&quot;: &quot;string&quot;,
+    &quot;user_id&quot;: &quot;string&quot;,
+    &quot;build_id&quot;: &quot;string&quot;,
+    &quot;state&quot;: &quot;string&quot;,
+    &quot;name&quot;: &quot;string&quot;,
+    &quot;url&quot;: &quot;string&quot;,
+    &quot;ssl_url&quot;: &quot;string&quot;,
+    &quot;admin_url&quot;: &quot;string&quot;,
+    &quot;deploy_url&quot;: &quot;string&quot;,
+    &quot;deploy_ssl_url&quot;: &quot;string&quot;,
+    &quot;screenshot_url&quot;: &quot;string&quot;,
+    &quot;review_id&quot;: 0,
+    &quot;draft&quot;: true,
+    &quot;required&quot;: [
+      &quot;string&quot;
+    ],
+    &quot;required_functions&quot;: [
+      &quot;string&quot;
+    ],
+    &quot;error_message&quot;: &quot;string&quot;,
+    &quot;branch&quot;: &quot;string&quot;,
+    &quot;commit_ref&quot;: &quot;string&quot;,
+    &quot;commit_url&quot;: &quot;string&quot;,
+    &quot;skipped&quot;: true,
+    &quot;created_at&quot;: &quot;string&quot;,
+    &quot;updated_at&quot;: &quot;string&quot;,
+    &quot;published_at&quot;: &quot;string&quot;,
+    &quot;title&quot;: &quot;string&quot;,
+    &quot;context&quot;: &quot;string&quot;,
+    &quot;locked&quot;: true,
+    &quot;review_url&quot;: &quot;string&quot;,
+    &quot;site_capabilities&quot;: {
+      &quot;large_media_enabled&quot;: true
+    }
+  }
+]
+</code></pre>
+<p>So to get the current deploy status, you need logic to get the deploys and simply return the first item in the array. I build a serverless function called <code>deploy-status</code> that does this:</p>
+<pre><code class="language-js">const siteId = 'www.raymondcamden.com';
+const token = process.env.NETLIFY_TOKEN;
+const fetch = require('node-fetch');
+
+const handler = async (event) =&gt; {
+  try {
+
+    let endpoint = `https://api.netlify.com/api/v1/sites/${siteId}/deploys`;
+    let result = await fetch(endpoint, {
+      headers: {
+        'Authorization':`Bearer ${token}`
+      }
+    });
+    
+    let data = await result.json();
+    // first entry is last deploy
+    let lastDeploy = data[0];
+    // it contains a lot more info then we need
+    let deploy = {
+      state: lastDeploy.state, 
+      created_at: lastDeploy.created_at, 
+      updated_at: lastDeploy.updated_at, 
+      error_message: lastDeploy.error_message,
+      published_at: lastDeploy.published_at,
+      deploy_time: lastDeploy.deploy_time,
+      screeenshot_url: lastDeploy.screeenshot_url
+    };
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(deploy),
+    }
+  } catch (error) {
+    return { statusCode: 500, body: error.toString() }
+  }
+}
+
+module.exports = { handler }
+</code></pre>
+<p>As you can see, I hit the endpoint and pass in my security token (you can get this from your Netlify profile page, I've set it up as an environment variable). I get the latest deploy, and then I made some decisions about what to return. I felt like there was some sensitive information in the status result as well as stuff I just didn't think I needed. Therefore I create a new variable of the &quot;important&quot; stuff from the status and return that. You can see this right now on my site if you go here:</p>
+<p><a href="https://www.raymondcamden.com/.netlify/functions/deploy-status">https://www.raymondcamden.com/.netlify/functions/deploy-status</a></p>
+<p>Here's an example result:</p>
+<pre><code class="language-js">{
+  &quot;state&quot;: &quot;ready&quot;,
+  &quot;created_at&quot;: &quot;2020-11-03T19:31:05.661Z&quot;,
+  &quot;updated_at&quot;: &quot;2020-11-03T19:38:16.374Z&quot;,
+  &quot;error_message&quot;: null,
+  &quot;published_at&quot;: &quot;2020-11-03T19:38:13.380Z&quot;,
+  &quot;deploy_time&quot;: 425
+}
+</code></pre>
+<p>Cool! So at this point you can do just about anything. For me, I decided to add information about my build status to my <a href="/stats">stats</a> page. I added two new fields to the data I display. First is the build status. If the result of the call is <code>ready</code>, then it means <code>published</code>. If my build is published, then I render the <code>published_at</code> result. You can get the complete source of my stats page (along with the rest of the site) on my <a href="https://github.com/cfjedimaster/raymondcamden2020">GitHub</a> repo for the site, but here's the simple Vue.js code I'm using in my <code>create</code> method:</p>
+<pre><code class="language-js">// new work to show build status
+let buildReq = await fetch('/.netlify/functions/deploy-status');
+let buildData = await buildReq.json();
+if(buildData.state === 'ready') {
+	this.buildStatus = 'Published';
+	this.buildTime = buildData.published_at;
+	this.buildPublished = true;
+} else this.buildStatus = buildData.state;
+</code></pre>
+<p>As I said, you can see this on my <a href="/stats">stats</a> page if you're curious. I hope this little example is useful. Most of my Netlify API posts relate to analytics which are <em>not</em> officially supported, but this time everything I've shown is safe to use. Enjoy!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Making Monsters with JavaScript</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Making Monsters with JavaScript</h2>
+<p>
+Written: 7/18/2020
+</p>
+
+
+<p>A few days ago I <a href="https://www.raymondcamden.com/2020/07/17/testing-vuejs-application-files-that-arent-components">blogged</a> about how I had started on a Vue.js RPG game a while ago and never got around to putting more work into it. This may be hard to believe, but building games is pretty hard! I realized though that the parts I most looked forward too, the more creative parts, were things that I could work on and just stop worrying about actually finishing the game.</p>
+<p>That realization was incredibly freeing. It also immediately started the creative juices flowing. While walking my dog a few days ago (another activity that really improves my creativity) I formulated a good plan to build random monsters. One of the staples of many RPGs are random encounters. Your character, or party, is wondering the wilderness and all of a sudden they find themselves under attack.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/bt1.gif" alt="Screen shot from Bards Tale 1" class="lazyload imgborder imgcenter">
+</p>
+<p>The idea I had took a base set of monsters and then applied various modifiers and randomness to them. The idea being that you could have a small of monsters that would &quot;scale up&quot; to many more unique ones. Now, by &quot;unique&quot; I mean something like comparing a blue gremlin to a red gremlin. Many old games would take a base monster, apply a color shift to it, and call it done. Here's the basic flow of what I built.</p>
+<p>First - define an array of monsters. For now, I just have five:</p>
+<pre><code class="language-js">const baseMonsters = [
+	{
+		name: &quot;rat&quot;, 
+		str: &quot;1d3&quot;, 
+		dex: &quot;1d4&quot;,
+		int: &quot;1d3&quot;, 
+		hp: &quot;1d4&quot;
+	},
+	{
+		name: &quot;pig&quot;,
+		str: &quot;1d4&quot;, 
+		dex: &quot;1d3&quot;, 
+		int: &quot;1d6&quot;, 
+		hp: &quot;1d4&quot;
+	}, 
+	{
+		name: &quot;gremlin&quot;, 
+		str: &quot;1d3&quot;, 
+		dex: &quot;1d4&quot;, 
+		int: &quot;1d4&quot;, 
+		hp: &quot;1d4&quot;
+	}, 
+	{
+		name: &quot;skeleton&quot;, 
+		str: &quot;1d6&quot;, 
+		dex: &quot;1d6&quot;, 
+		int: &quot;1d4&quot;, 
+		hp: &quot;1d6+2&quot;
+	},
+	{
+		name: &quot;flying lizard&quot;, 
+		str: &quot;2d6&quot;, 
+		dex: &quot;2d6&quot;, 
+		int: &quot;1d6&quot;, 
+		hp: &quot;2d6&quot;
+	}
+];
+</code></pre>
+<p>Each monster has a name, three attributes related to how well they fight (my game only has strength, dexterity, and intelligence) and their hit points. For each stat I assign dice rolls applicable for their respective strength as a creature. This was kinda arbitrary of course. I gave rats higher (possible) dexterity because I figured they were quick. I gave gremlins higher intelligence because, well, gremlins.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/gremlin.jpg" alt="Gremlin from the old movie" class="lazyload imgborder imgcenter">
+</p>
+<p>So the first step is to select one and then run the dice rolls for each stat. Next, there is a chance that a monster has a boon. A boon is a positive or negative change to one part of their stats. The chance for this change is based on a constant:</p>
+<pre><code class="language-js">const boonChance = 20;
+</code></pre>
+<p>This is out of a 100, but I also make it a bit higher if the monster is scaled higher. I haven't mentioned scales yet but I will in a second. Here's the function that determines if the monster has a boon:</p>
+<pre><code class="language-js">/*
+As described above, it's the boonChance, which is kinda low, but the higher the scale, the higher
+the change of a boon. Right now its boonChance + 2*scale
+*/
+function hasBoon(scale) {
+	let chance = boonChance + (2*scale);
+	return (misc.getRandomIntInclusive(0, 100) &lt; chance);
+}
+</code></pre>
+<p>If true, I then flip a coin to see if it's a good or bad one:</p>
+<pre><code class="language-js">let positive = 1;
+if(misc.getRandomIntInclusive(0,100) &gt; 50) positive = -1;
+</code></pre>
+<p>Now I figure out what stat is changed by just picking a number from 1 to 3 (ok technically 0 to 2):</p>
+<pre><code class="language-js">let boonType = misc.getRandomIntInclusive(0, 2);
+</code></pre>
+<p>Now I have an if statement and based on boonType, either change STR, DEX, or INT. The boon does two things. It adds, or subtracts, a 1D6 value (roll a six sided die one time). For example:</p>
+<pre><code class="language-js">monster.str += positive * dice.roll('1d6');
+if(monster.str &lt; 1) monster.str = 1;
+</code></pre>
+<p>Notice I also ensure the value doesn't go below 1. Next, I wanted a way to let the player know that there's something special about this creature. I created a list of &quot;titles&quot; for each stat and each type of boon, as well as whether they were positive or negative.</p>
+<pre><code class="language-js">const boons = {
+	str: {
+		positive: [&quot;strong&quot;, &quot;ripped&quot;, &quot;beefy&quot;], 
+		negative: [&quot;weak&quot;, &quot;wimpy&quot;, &quot;pushover&quot;, &quot;meek&quot;]
+	}, 
+	dex: {
+		positive: [&quot;quick&quot;, &quot;nimble&quot;, &quot;spry&quot;, &quot;dexterous&quot;], 
+		negative: [&quot;clumsy&quot;, &quot;fumbly&quot;]
+	}, 
+	int: {
+		positive: [&quot;smart&quot;, &quot;brilliant&quot;, &quot;intelligent&quot;],
+		negative: [&quot;slow&quot;, &quot;dumb&quot;, &quot;dull&quot;]
+	}
+}
+</code></pre>
+<p>At this point, we've got a random monster, with random stats, although stats that make sense for how strong they are in general, and a potential boon that impacts their name, so for example, if face a clumsy pig, you may know this means their dexterity is lower than normal.</p>
+<p>Alright, the final part comes in the scale I previously mentioned. In most RPGs, the monsters closer to you when you start out or relatively easy to take on. The farther you move away from the starting point, the stronger they get. My utility takes a scale argument. This scale can be any number. For example, a scale of 1.2 means a monster bit higher than normal. The scale does two things.</p>
+<p>First, it improves every stat:</p>
+<pre><code class="language-js">monster.str = Math.floor(scale * monster.str);
+monster.dex = Math.floor(scale * monster.dex);
+monster.int = Math.floor(scale * monster.int);
+monster.hp = Math.floor(scale * monster.hp);
+</code></pre>
+<p>And remember, this is done after a boon. So a monster that got a bonus to strength will be incredibly strong after the scaling. Next, I created a set of titles that helped reflect the higher scale.</p>
+<pre><code class="language-js">const scaledTitles = [
+	[&quot;experienced&quot;, &quot;tough&quot;],
+	[&quot;expert&quot;, &quot;trained&quot;, &quot;veteran&quot;],
+	[&quot;elite&quot;, &quot;master&quot;, &quot;powerful&quot;, &quot;lord&quot;],
+	[&quot;epic&quot;, &quot;god-like&quot;, &quot;super-powered&quot;]
+];
+</code></pre>
+<p>Scale titles are only used when the scale is above 2. A scale of 2.0 to 2.9 will use a random title from the first index of scaledTitles, and so forth. If you pass a scale of 5 or 6, it uses the highest tier.</p>
+<pre><code class="language-js">if(scale &gt;= 2) {
+	scale = Math.floor(scale);
+	scale -= 2;
+	if(scale &gt; scaledTitles.length-1) scale = scaledTitles.length-1;
+	let picked = misc.getRandomIntInclusive(0, scaledTitles[scale].length-1);
+	monster.name =  scaledTitles[scale][picked]+ ' ' + monster.name;
+}
+</code></pre>
+<p>So just to recap - while I only have 5 monsters now, the total number of variations is really high. And even better, to improve the set of possibilities, I can add a new base monster, add new boon titles, new scaled titles, as they come to me. Every single addition is a multiplicative change. I'll be honest, the actual is probably so so in terms of quality. I don't care. What excites me is that as soon as I get a creative idea, it's an incredible simple change!</p>
+<p>Following the tip I <a href="https://www.raymondcamden.com/2020/07/17/testing-vuejs-application-files-that-arent-components">previously posted</a> about, I wrote a quick test script:</p>
+<pre><code class="language-js">/*
+Ray, run with: node -r esm test.js
+*/
+
+import { monsterMaker } from '../src/utils/monsterMaker'
+
+
+console.log('no scale');
+console.log(monsterMaker.create());
+
+console.log('\nscale 1.5');
+console.log(monsterMaker.create(1.5));
+
+console.log('\nscale 2');
+console.log(monsterMaker.create(2));
+
+console.log('\nscale 3');
+console.log(monsterMaker.create(3));
+
+console.log('\nscale 4');
+console.log(monsterMaker.create(4));
+
+console.log('\nscale 5');
+console.log(monsterMaker.create(5));
+
+console.log('\nscale 6');
+console.log(monsterMaker.create(6));
+</code></pre>
+<p>And here's some results:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/monsters.jpg" alt="List of resulting monsters" class="lazyload imgborder imgcenter">
+</p>
+<p>You can find this repo at <a href="https://github.com/cfjedimaster/vue-demos/tree/master/grpg">https://github.com/cfjedimaster/vue-demos/tree/master/grpg</a>. Feel free to make PRs to add new monsters and titles.</p>
+<p><span>Photo by <a href="https://unsplash.com/@polarmermaid?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Anne Nygård</a> on <a href="https://unsplash.com/s/photos/monsters?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

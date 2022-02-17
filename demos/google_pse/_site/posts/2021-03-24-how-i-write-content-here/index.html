@@ -1,0 +1,71 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>How I Write Content Here...</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>How I Write Content Here...</h2>
+<p>
+Written: 3/23/2021
+</p>
+
+
+<p>A few days ago someone (sorry, I forgot to Like the tweet so I'd remember) asked me how I create content for my blog, specifically the tech stack and process. About a year ago I wrote about my tech stack in general (<a href="https://www.raymondcamden.com/2020/04/29/my-tech-stack-so-far-in-2020">My Tech Stack (So Far) in 2020</a>) but I didn't go deep into the &quot;process&quot; of writing here. It's not too terribly complex and it works well for me. Since I'm the only user, I'm the only one I have to keep happy so keep that in mind if what I describe below seems weird or crazy.</p>
+<p>First off - a bit of history. I launched my blog in February of 2003 (you can still read that <a href="https://www.raymondcamden.com/2003/02/12/395FA384-CC01-17D6-AE9B36479350D784">first post</a> if you want) on custom blogware written in Adobe ColdFusion. The software eventually morphed into an open source project called BlogCFC that went through numerous updates and editions and had a pretty large following in the ColdFusion community. The authoring experience was a simple web-based administrator with a simple form to write content. I did not use a rich text editor but did do things likes automatically insert paragraph tags and line breaks where appropriate.</p>
+<p>I kept it on ColdFusion for over ten years before moving to WordPress in 2015 or so. I had about five thousand or so blog posts under my belt by then. (To be clear, before I got into Twitter, I used my blog many times for short announcements, links to other posts, and things that I primarily do on Twitter now.) I <em>loved</em> WordPress, especially the authoring environment. I <em>hated</em> how fragile WordPress was and trying to keep my server running. I wanted my blog to &quot;just work&quot; and I was disappointed that was so hard with WordPress. I'm totally fine with that being my fault, but at the end of the day I didn't care, I just wanted something that worked.</p>
+<p>I kept it on WordPress for about a year before moving to the Jamstack in January of 2016 (<a href="https://www.raymondcamden.com/2016/01/20/welcome-to-raymondcamden-2016">Welcome to RaymondCamden.com 2016</a>). First with <a href="http://gohugo.io/">Hugo</a> and <a href="https://surge.sh/">Surge</a>. I eventually moved to <a href="https://jekyllrb.com/">Jekyll</a> as I found Hugo to be a hard to use. I also migrated hosting to <a href="https://www.netlify.com/">Netlify</a>. Finally, I <a href="https://www.raymondcamden.com/2020/02/27/raymondcamdencom-now-powered-by-eleventy">moved</a> to <a href="https://www.11ty.dev/">Eleventy</a> in February of last year.</p>
+<p>So that's the history, but it doesn't answer the initial question - how do I create content?</p>
+<p>First off, every blog post is a Markdown file. I don't create this by hand. I use a Node script called <code>genpos.js</code> (I'll be linking to a repository of everything at the end) that does a few things.</p>
+<ol>
+<li>First, it creates a folder for the blog post based on YEAR/MONTH/DAY. It intelligently creates YEAR and MONTH when it needs to. Ditto for DAY of course if I somehow post twice in a day.</li>
+<li>Then it creates a base Markdown file to save me some typing. This Markdown file uses front matter that Eleventy recognizes and makes it easier for me to start writing.</li>
+<li>The script makes me provide a title which it then uses in the front matter and as part of the filename.</li>
+</ol>
+<p>So for me, I start like so:</p>
+<pre><code class="language-bash">./genpos.js &quot;How I Write Content Here...&quot;
+</code></pre>
+<p>Next, I run a script that uses the Netlify CLI to start a local dev server. This runs Netlify's local dev environment (which lets you test redirects and serverless functions) and runs my Eleventy install. What you won't find in my Git repo is an <code>.eleventyignore</code> file which looks like so:</p>
+<pre><code>/_posts/200*/**
+/_posts/201*/**
+/node_modules/
+</code></pre>
+<p>This tells Eleventy to ignore the first twenty years of my blog and makes it run a <em>heck</em> of a lot quicker locally. Netlify's CLI will pop up a tab in my browser and since my initial Node script made a file, I can actually see it immediately. It's just a title but I can click to go into it and start writing. Eleventy has hot reload so as I write and save, I can see how it looks.</p>
+<p>Images are another matter. When I switched to the Jamstack I had a huge amount of old images. I didn't want them in my Git repo for... I don't know. It just felt wrong. I also had a large number of attachments (zips for blog posts) as well. So I decided to use Amazon S3 for that. I set up a bucket and made it resolve to https://static.raymondcamden.com.</p>
+<p>When I have an image for a blog post, first I resize it to a max of 650 wide. I normally do this via a Windows Explorer plugin (<a href="https://docs.microsoft.com/en-us/windows/powertoys/image-resizer">Image Resizer Utility</a>. I then copy it to an S3 folder with a path of the form: <code>/images/YEAR/MONTH</code>. I don't make a folder per day as I don't usually have more than 10-20 images per month.</p>
+<p>To make it quicker to use in my editor, Visual Studio Code, I built a shortcut that outputs the relevant HTML. It's dynamic as well:</p>
+<pre><code class="language-js">	&quot;img&quot;: {
+		&quot;prefix&quot;: &quot;img&quot;,
+		&quot;body&quot;: [
+			&quot;&lt;p&gt;&quot;,
+			&quot;&lt;img src=\&quot;https://static.raymondcamden.com/images/$CURRENT_YEAR/$CURRENT_MONTH/$1\&quot; alt=\&quot;\&quot; class=\&quot;lazyload imgborder imgcenter\&quot;&gt;&quot;,
+			&quot;&lt;/p&gt;&quot;
+		],
+		&quot;description&quot;: &quot;Images&quot;
+	},
+</code></pre>
+<p>I also use a &quot;lazyload&quot; library from Google to - wait for it - lazily load images as they scroll into view.</p>
+<p>Images are probably the slowest part of my process, but I've got the muscle memory for it now that such that it hardly seems like an issue.</p>
+<p>Code samples are done using regular Markdown-isms (three single quotes before and after) with <a href="https://prismjs.com/">Prism</a> used to render them. The only issue I have with code samples is that I use Liquid for my template engine and if I want to actually talk about Liquid, I have to escape the tags. I created a Visual Studio Code keyboard shortcut to make that easier for me. Vue.js uses similar tokens so I have to escape that as well, but again, it's easy.</p>
+<p>For my top banner, I use an image from <a href="https://unsplash.com/">Unsplash</a>, a service that provides free, and beautiful, art. I try to always credit the artist and they make it pretty simple to do so. (Look at the bottom of this post for an example.)</p>
+<p>Alright, so when I'm done, I commit my Markdown file to my GitHub repository: <a href="https://github.com/cfjedimaster/raymondcamden2020">https://github.com/cfjedimaster/raymondcamden2020</a> At this point, Netlify takes over. It notices whenever I commit to my repository and automatically fires off builds. These builds take time:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/ray1.jpg" alt="Build times" class="lazyload imgborder imgcenter">
+</p>
+<p>Normally I just go do something else. When the build is done (and you can use <code>netlify watch</code> at the CLI to monitor), I then write a tweet about the post. I also do a &quot;ICYMI&quot; (In Case You Missed It) repeat tweet for about a week later.</p>
+<p>And that's it! If you've got any questions about this process, just let me know!</p>
+<p>Photo by <a href="https://unsplash.com/@aaronburden?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Aaron Burden</a> on <a href="https://unsplash.com/s/photos/writing?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using the Adobe PDF Tools API to Generate Thumbnails</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using the Adobe PDF Tools API to Generate Thumbnails</h2>
+<p>
+Written: 3/1/2021
+</p>
+
+
+<p>As folks have noticed, I've been <a href="https://www.raymondcamden.com/tags/pdf+services">blogging</a> lately about the tools Adobe has for working with PDFs. Broadly speaking these fall under the umbrella of <a href="https://www.adobe.io/apis/documentcloud/dcsdk/">Adobe Document Services</a>. I've focused so far on the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">Embed API</a> but today I want to share an example of the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-tools.html">Tools API</a>.</p>
+<p>Unlike the previous examples where I used client-side code to display PDFs in a browser, the Tools API are all HTTP based APIs built to let you work with PDF files. You should check the docs for a full set of features, but it allows for things like:</p>
+<ul>
+<li>Creating PDFs from HTML and Office formats.</li>
+<li>Exporting PDFs to Office or image formats.</li>
+<li>OCRing a PDF to let you use search.</li>
+<li>Protecting, or removing protection, from a PDF.</li>
+<li>Splitting, combining, re-ordering, PDFs as well as adding or removing pages.</li>
+<li>And more.</li>
+</ul>
+<p>The feature that interested me the most (and will be used in my next blog post) is the ability to convert a PDF into images. My specific use case was to take a PDF, convert it into images, grab the first page, and resize it into a thumbnail.</p>
+<p>Before I get started sharing my solution, note that unlike the Embed API, Tooling is not free. However, you get a free trial of 1000 API calls over six months. (By that way, to all tech companies that do timed trials. Please consider using a length of time like Adobe has done here. I can't tell you how many times I've signed up for a trial of something and then gotten too busy to use it!) One, very, <em>very</em> cool part of the API is how credential creation is handled.</p>
+<p>If you create new credentials from the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/gettingstarted.html">Getting Started</a> page, you have the opportunity of downloading example code (in a few languages, including Node) that includes your authentication details in the zip itself. After struggling with Google's APIs and their authentication, this was really neat to see. I feel like Adobe's API authentication requirements are a bit complex, but having working samples with my own credentials made testing so much easier. I highly recommend using that option when you sign up, even if you don't plan on looking at the examples for a while.</p>
+<p>Alright, so once you have your credentials, you can start using the API. Adobe provides an NPM package you can use like so:</p>
+<pre><code class="language-bash">npm install @adobe/documentservices-pdftools-node-sdk
+</code></pre>
+<p>Next, take a look at the <a href="https://opensource.adobe.com/pdftools-sdk-docs/release/latest/howtos.html#export-a-pdf-to-images">example</a> for exporting a PDF to images. It works by taking a source PDF file, generating an image for each page, and saving it to a zip file.</p>
+<p>Here's the example from their pages (and again, if you download the samples you can run it yourself):</p>
+<pre><code class="language-js">// Get the samples from http://www.adobe.com/go/pdftoolsapi_node_sample
+const PDFToolsSdk = require('@adobe/documentservices-pdftools-node-sdk');
+
+ try {
+   // Initial setup, create credentials instance.
+   const credentials =  PDFToolsSdk.Credentials
+       .serviceAccountCredentialsBuilder()
+       .fromFile(&quot;pdftools-api-credentials.json&quot;)
+       .build();
+
+   //Create an ExecutionContext using credentials and create a new operation instance.
+   const executionContext = PDFToolsSdk.ExecutionContext.create(credentials),
+       exportPDF = PDFToolsSdk.ExportPDF,
+       exportPdfOperation = exportPDF.Operation.createNew(exportPDF.SupportedTargetFormats.JPEG);
+
+   // Set operation input from a source file
+   const input = PDFToolsSdk.FileRef.createFromLocalFile('resources/exportPDFToImageInput.pdf');
+   exportPdfOperation.setInput(input);
+
+   // Execute the operation and Save the result to the specified location.
+   exportPdfOperation.execute(executionContext)
+       .then(result =&gt; result.saveAsFile('output/exportPDFToJPEG.zip'))
+       .catch(err =&gt; {
+           if(err instanceof PDFToolsSdk.Error.ServiceApiError
+               || err instanceof PDFToolsSdk.Error.ServiceUsageError) {
+               console.log('Exception encountered while executing operation', err);
+           } else {
+               console.log('Exception encountered while executing operation', err);
+           }
+       });
+} catch (err) {
+   console.log('Exception encountered while executing operation', err);
+}
+</code></pre>
+<p>This boils down to:</p>
+<ul>
+<li>Point to the authentication</li>
+<li>Point to a local PDF</li>
+<li>Export to a zip</li>
+</ul>
+<p>The end result is a zip of every image. Here's an example:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/pdft.jpg" alt="Zip listing" class="lazyload imgborder imgcenter">
+</p>
+<p>So given that we've got a way to create a zip of images, what I need to do is take this, extract out the first file (which should represent the first page of the PDF), and then resize it so it's appropriate for a thumbnail.</p>
+<p>Here's my script, bit by bit, and I'll share the entire script at the end. First, I generate the zip.</p>
+<pre><code class="language-js">//test pdf file
+let pdf = './fw9.pdf';
+
+let zip = await generateImageZip(pdf, credsPath, outputPath);
+</code></pre>
+<p>My <code>generateImageZip</code> function is just a more dynamic version of the code above:</p>
+<pre><code class="language-js">async function generateImageZip(pdfPath, credsPath, outputPath) {
+
+	return new Promise((resolve, reject) =&gt; {
+
+		let output = outputPath + nanoid() + '.zip';
+
+		const credentials = PDFToolsSdk.Credentials.serviceAccountCredentialsBuilder()
+		.fromFile(credsPath)
+		.build();
+
+		const executionContext = PDFToolsSdk.ExecutionContext.create(credentials),
+			exportPDF = PDFToolsSdk.ExportPDF,
+			exportPdfOperation = exportPDF.Operation.createNew(exportPDF.SupportedTargetFormats.JPEG);
+
+		const input = PDFToolsSdk.FileRef.createFromLocalFile(pdfPath);
+		exportPdfOperation.setInput(input);
+
+		exportPdfOperation.execute(executionContext)
+		.then(result =&gt; result.saveAsFile(output))
+		.then(r =&gt; {
+			resolve(output);
+		})
+		.catch(err =&gt; {
+			if(err instanceof PDFToolsSdk.Error.ServiceApiError
+					|| err instanceof PDFToolsSdk.Error.ServiceUsageError) {
+					console.log('Exception encountered while executing operation', err);
+			} else {
+					console.log('Exception encountered while executing operation', err);
+				}
+		});
+	});
+}
+</code></pre>
+<p>Note the use of <code>nanoid</code> in there. This is a <a href="https://www.npmjs.com/package/nanoid">npm package</a> for generating a unique string appropriate for a file name.</p>
+<p>Next I need to get the first file from the zip file. I used the npm package <a href="https://www.npmjs.com/package/node-stream-zip">node-stream-zip</a>. Here's how it's called:</p>
+<pre><code class="language-js">let dest = await extractFirstFile(zip, outputPath);
+console.log(`image extracted to ${dest}`);
+</code></pre>
+<p>And here's the function:</p>
+<pre><code class="language-js">async function extractFirstFile(zip, outputPath) {
+
+	return new Promise(async (resolve, reject) =&gt; {
+		// Read the zip and extract the first file
+		let zipFile = new StreamZip.async({file: zip });
+
+		const entries = await zipFile.entries();
+		let first = Object.values(entries)[0];
+
+		let dest = outputPath + nanoid() + '.' + first.name.split('.').pop();
+
+		await zipFile.extract(first.name, dest );
+		await zipFile.close();
+		resolve(dest);
+	});
+}
+</code></pre>
+<p>I'm <em>very</em> unsure about this part: <code>let first = Object.values(entries)[0];</code> Everything I know about objects tells me that there is no order to the keys (or values), but this seemed to work well. I'd feel better getting all the file names, do a custom sort to find <code>_1</code>, and then returning that, but again this seemed to work. Just know I've got reservations. At the end of this, we've got a file name for the extracted image.</p>
+<p>To handle resizing it, I used <a href="https://www.npmjs.com/package/jimp">jimp</a>. In the main portion of my script I call my function like so:</p>
+<pre><code class="language-js">await makeThumbnail(dest, 200, 80);
+console.log('Done resizing image.');
+</code></pre>
+<p>And here's the actual logic:</p>
+<pre><code class="language-js">async function makeThumbnail(path, width, quality) {
+
+	const image = await Jimp.read(path);
+	await image.resize(width, Jimp.AUTO);
+	await image.quality(quality);
+	await image.writeAsync(path);
+	return true;
+
+}
+</code></pre>
+<p>I'm resizing it and setting a quality. Normally I'd probably save it to a new file, but I just overwrite the original. Here's the entire script:</p>
+<pre><code class="language-js">const PDFToolsSdk = require('@adobe/documentservices-pdftools-node-sdk');
+const nanoid = require('nanoid').nanoid;
+const StreamZip = require('node-stream-zip');
+const Jimp = require('jimp');
+const fs = require('fs');
+
+const credsPath = './pdftools-api-credentials.json';
+
+//path to store crap
+const outputPath = './output/';
+
+(async () =&gt; {
+
+	//test pdf file
+	let pdf = './fw9.pdf';
+	
+	let zip = await generateImageZip(pdf, credsPath, outputPath);
+	console.log(`image generated from source ${pdf} at ${zip}`);
+
+	let dest = await extractFirstFile(zip, outputPath);
+	console.log(`image extracted to ${dest}`);
+
+	await makeThumbnail(dest, 200, 80);
+	console.log('Done resizing image.');
+
+	//cleanup
+	fs.unlinkSync(zip);
+
+})();
+
+async function generateImageZip(pdfPath, credsPath, outputPath) {
+
+	return new Promise((resolve, reject) =&gt; {
+
+		let output = outputPath + nanoid() + '.zip';
+
+		const credentials = PDFToolsSdk.Credentials.serviceAccountCredentialsBuilder()
+		.fromFile(credsPath)
+		.build();
+
+		const executionContext = PDFToolsSdk.ExecutionContext.create(credentials),
+			exportPDF = PDFToolsSdk.ExportPDF,
+			exportPdfOperation = exportPDF.Operation.createNew(exportPDF.SupportedTargetFormats.JPEG);
+
+		const input = PDFToolsSdk.FileRef.createFromLocalFile(pdfPath);
+		exportPdfOperation.setInput(input);
+
+		exportPdfOperation.execute(executionContext)
+		.then(result =&gt; result.saveAsFile(output))
+		.then(r =&gt; {
+			resolve(output);
+		})
+		.catch(err =&gt; {
+			if(err instanceof PDFToolsSdk.Error.ServiceApiError
+					|| err instanceof PDFToolsSdk.Error.ServiceUsageError) {
+					console.log('Exception encountered while executing operation', err);
+			} else {
+					console.log('Exception encountered while executing operation', err);
+				}
+		});
+	});
+}
+
+async function extractFirstFile(zip, outputPath) {
+
+	return new Promise(async (resolve, reject) =&gt; {
+		// Read the zip and extract the first file
+		let zipFile = new StreamZip.async({file: zip });
+
+		const entries = await zipFile.entries();
+		let first = Object.values(entries)[0];
+
+		let dest = outputPath + nanoid() + '.' + first.name.split('.').pop();
+
+		await zipFile.extract(first.name, dest );
+		await zipFile.close();
+		resolve(dest);
+	});
+}
+
+async function makeThumbnail(path, width, quality) {
+
+	const image = await Jimp.read(path);
+	await image.resize(width, Jimp.AUTO);
+	await image.quality(quality);
+	await image.writeAsync(path);
+	return true;
+
+}
+</code></pre>
+<p>And here's an example I got from a lovely IRS form.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/thumb.jpg" alt="Thumbnail" class="lazyload imgborder imgcenter">
+</p>
+<p>In the next post, I'm going to show how to take this and employ it with Eleventy!</p>
+<p><span>Photo by <a href="https://unsplash.com/@anniespratt?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Annie Spratt</a> on <a href="https://unsplash.com/s/photos/images?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

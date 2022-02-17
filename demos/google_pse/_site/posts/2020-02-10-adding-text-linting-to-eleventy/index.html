@@ -1,0 +1,100 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Adding Text Linting to Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Adding Text Linting to Eleventy</h2>
+<p>
+Written: 2/9/2020
+</p>
+
+
+<p>While going through the Eleventy's docs recently I discovered an interesting feature, <a href="https://www.11ty.dev/docs/config/#linters">Linters</a>. This feature lets you define custom rules you want to apply to your logic such that you can throw warnings during the editing and publishing process. The docs have an example of this in action but I wanted to expand a bit on it and see if I can add in <a href="https://textlint.github.io/">textlint</a> support. textlint is a customizable text linting program built with Node.</p>
+<p>I first <a href="https://www.raymondcamden.com/2018/12/28/adding-automated-text-linting-to-my-blog">blogged</a> about textlint back at the end of 2018 and described how I connected it to my GitHub commit process. I decided to take a look at how I could integrate it with Eleventy.</p>
+<p>First, a quick note about their linter API. First, this will not allow you to throw errors. I mean you could throw an error in your code, a manual Exception I mean. Instead you use this feature as a way to log out messages to the console during development.</p>
+<p>You are passed three arguments: content, inputPath, and outputPath. Let's discuss the second two first. As you can guess, inputPath is the file being processed, like foo.liquid, and outputPath is the destination path which follows Eleventy's rules for such things. Using foo.liquid as input, it may be foo/index.html for output. <em>These paths are relative</em>, so keep that in mind if you need to do anything that requires the full path.</p>
+<p>The content argument is the <em>parsed</em> HTML output of the template, which is very cool. It means you can lint the text the public will see. Well that's mostly cool. In my testing, I noticed that one of the plugins I used for text linting did not like HTML, so I removed it. But in general I think it's very good that you get the &quot;final&quot; content instead of content with embedded variables and things in it from the template language.</p>
+<p>Alright, so with all that, how does this all work? Let's consider their default example:</p>
+<pre><code class="language-js">  eleventyConfig.addLinter(&quot;inclusive-language&quot;, function(content, inputPath, outputPath) {
+    let words = &quot;simply,obviously,basically,of course,clearly,just,everyone knows,however,easy&quot;.split(&quot;,&quot;);
+    if( inputPath.endsWith(&quot;.md&quot;) ) {
+      for( let word of words) {
+        let regexp = new RegExp(&quot;\\b(&quot; + word + &quot;)\\b&quot;, &quot;gi&quot;);
+        if(content.match(regexp)) {
+          console.warn(`Inclusive Language Linter (${inputPath}) Found: ${word}`);
+        }
+      }
+    }
+  });
+</code></pre>
+<p>They begin by defining a set of source words they want to check for. Next they see if the input file was markdown. I think, in general, this is a good thing to do since a content site will probably be largely markdown with other ancillary files being Liquid or some other template language. So for example, my blog uses markdown for 100% of the blog content, but pages like my &quot;About&quot; and &quot;Speaking&quot; pages are Liquid. In theory I'd like to lint them too, but I'd be ok with just the markdown being check. When run, this is how it looks (assuming you have a few issues in your content):</p>
+<img src="https://static.raymondcamden.com/images/2020/02/tl1.png" alt="Example output" class="imgborder imgcenter">
+<p>You can see the messages sent out immediately after I started the server. The messages will be repeated every time I edit so the feature gives you good, constant, feedback in the console as you work.</p>
+<p>That's the out of the box example, how about an example with the textlint project? First off, note that textlint has a large number of <a href="https://github.com/textlint/textlint/wiki/Collection-of-textlint-rule">rules</a>. Each rule is it's own project and must be npm installed. Each rule also has it's own configuration. In my testing (both now and the previous times I've worked with it), I've found mixed results from different rules. For example, I never could get spell check working well. Also, things like the <a href="https://github.com/azu/textlint-rule-alex">alex</a> rule, which looks for gender favouring or insensitive language, didn't work with HTML. I don't think that was documented at all. Basically this is my way of saying that while overall textlint is a cool project I think, you should expect a bit of roughness around the edges.</p>
+<p>For my testing I decided to use some of the same rules I used in my previous test.</p>
+<ul>
+<li><a href="https://github.com/azu/textlint-rule-alex">alex</a> which covers insensitive language</li>
+<li><a href="https://github.com/azu/textlint-rule-no-start-duplicated-conjunction">no-start-duplicated-conjunction</a> which attempts to find multiple sentences starting with words like &quot;but&quot; or &quot;so&quot; - I never got this test to work though.</li>
+<li><a href="https://github.com/sapegin/textlint-rule-terminology">terminology</a> which looks for the right spelling of certain technology-related words, like iOS versus ios.</li>
+</ul>
+<p>I made a new Eleventy project (which is just a folder) and npm installed textlint and then the three rule plugins. Here's my .eleventy.js:</p>
+<pre><code class="language-js">const chalk = require('chalk');
+const TextLintEngine = require('textlint').TextLintEngine;
+const options = {
+  rules: [&quot;alex&quot;, &quot;no-start-duplicated-conjunction&quot;, &quot;terminology&quot;]
+};
+const engine = new TextLintEngine(options);
+
+module.exports = function(eleventyConfig) {
+
+  eleventyConfig.addLinter(&quot;textlinter&quot;, async function(content, inputPath, outputPath) {
+
+    // Some rules don't like the HTML
+    content = content.replace(/&lt;.*?&gt;/g, '');
+
+    let results = await engine.executeOnText(content);
+    //console.log(JSON.stringify(results));
+    for(let i=0; i&lt;results.length; i++) {
+      for(let x=0; x&lt;results[i].messages.length; x++) {
+        let msg = `[${inputPath}] `+results[i].messages[x].message
+        console.log(chalk.yellow(msg));
+      }
+    }
+
+  });
+
+};
+</code></pre>
+<p>Alright, so on top, I started off adding <a href="https://github.com/chalk/chalk#readme">Chalk</a>, a cool utility that makes console.log messages stand out a bit. I then instantiated my instance of textlint.</p>
+<p>In the <code>addLinter</code> block, I then pass the content of the file being parsed to the engine and take the result. The results an array where each instance of the array contains an array of messages. So I loop inside a loop and output the result. You can do more with the results, like provide alternatives and the like, but you'll need to check what's provided on a rule by rule basis.</p>
+<p>For each message, I use <code>chalk.yellow</code> to make the message stand out a bit. Red may be better, but it's up to you!</p>
+<p>As I mentioned earlier, the alex rule didn't like HTML. It didn't throw an error, it simply ignored the entire input. That was frustrating, but quick to fix with the regex you see.</p>
+<p>Here's the output based on some test files I created.</p>
+<img src="https://static.raymondcamden.com/images/2020/02/tl2.png" alt="Example output from textlint 2" class="imgborder imgcenter">
+<p>As I said, this is not a perfect solution. So for example, for terminology I had used <code>javascript</code> in my test and it wasn't picked up. Why? I had this as input:</p>
+<pre><code class="language-html">Hi world I'm the mailman for today.
+
+I love me some javascript, don't you?
+
+I've got an android browser.
+
+How about ios testing?
+</code></pre>
+<p>See the comma after <code>javascript</code>? That was enough to &quot;break&quot; the rule. When I removed it the linter rule found it. It's an open source project so this could be patched of course, just remember what I said - each rule has it's own quirks you'll need to figure out.</p>
+<p>I hope this helps, and you can find the complete demo repository here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/textlint_demo">https://github.com/cfjedimaster/eleventy-demos/tree/master/textlint_demo</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>
