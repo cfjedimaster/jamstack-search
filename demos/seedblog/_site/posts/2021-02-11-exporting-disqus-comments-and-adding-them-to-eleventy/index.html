@@ -1,0 +1,343 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Exporting Disqus Comments and Adding Them to Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Exporting Disqus Comments and Adding Them to Eleventy</h2>
+<p>
+Written: 2/10/2021
+</p>
+
+
+<p>Apologies for what may be a long winded, kinda haphazzard post. The beginning of what I'm sharing here would be useful to anyone using <a href="https://disqus.com/">Disqus</a> while the remainder will only be of use to <a href="https://www.11ty.dev/">Eleventy</a> folks. I'll try to be clear about when that transition occurs so you can stop reading when it makes sense. Or you can just read everything, I won't mind!</p>
+<p>Alright, so what's the point of all this? I've noticed for some time now the comment traffic on my blog has decreased to near nothing. In fact, here's a chart that shows in pretty stark detail how much it's dropped:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/d1.jpg" alt="Line chart showing drop of comments" class="lazyload imgborder imgcenter">
+</p>
+<p>For folks curious, that chart comes from the Disqus reporting tool I built a few years ago called Vader. You can read more about it here: <a href="https://www.raymondcamden.com/2016/08/25/working-with-the-disqus-api-deeper-stats-2">Working with the Disqus API - Deeper Stats (2)</a> Disqus is a simple way to add commenting to a site, and I totally get why strong analytics requires a paid update, but I will never understand why Disqus simply can't tell you the total number of comments a site has. That's incredibly silly, if you ask me.</p>
+<p>That being said, I decided it was time for a change. I decided I would export my Disqus data, create a static version of it, and start working with <a href="https://indieweb.org/Webmention">Webmention</a>. The first part is done and is covered in this post.</p>
+<p>Let's begin by talking about the data. Disqus does have an export feature, which they warn you may not be available for all sites (tip to every developer resource ever - don't have vague limits in your docs). I tried it on mine and was surprised when I got an email five minutes later with a link to my export. Unfortunately it ended up being a corrupt gzip file so it was useless. As I had previous familiarity with their <a href="https://disqus.com/api/docs/">API</a>, I decided to give that a shot.</p>
+<p>Disqus considers comments to be in threads, where each thread, typically, relates to one blog post. (You can use Disqus for non-blog sites of course.) Their API to retrieve comments lets you get related thread data for each comment, so my first strategy was to get all the comments for my blog. Here's the script for that (I'll share links to GitHub sources at the end):</p>
+<pre><code class="language-js">/*
+Part 1. Get a raw set of data that later scripts will make better. But for now, just download.
+Result will be one huge array of posts. Each post object has a thread object.
+*/
+
+require('dotenv').config();
+const fetch = require('node-fetch');
+const fs = require('fs');
+
+// change this to your site
+const FORUM = 'raymondcamden';
+const KEY = process.env.KEY;
+/* 
+hard coded export, could be an arg, keeping it simple for now, slightly dynamic
+as I add the forum name, which I believe is always filename safe
+*/
+const FILENAME = 'rawdata.json';
+
+(async () =&gt; {
+	console.log(`Fetching threads for ${FORUM}`);
+	let posts = await getPosts(FORUM);
+	console.log(`Done fetching posts, total is ${posts.length}`);
+	let exportFile = FORUM + '_' + FILENAME;
+	fs.writeFileSync(exportFile, JSON.stringify(posts), 'utf-8');
+	console.log(`Data written to ${exportFile}`);
+	// temp
+	posts.forEach(p =&gt; {
+		if(p.isDeleted) {
+			console.log('DELETED POST', p);
+		}
+	});
+})();
+
+async function getPosts(forum, cursor, posts) {
+
+	let url = `https://disqus.com/api/3.0/posts/list.json?forum=${encodeURIComponent(forum)}&amp;api_key=${KEY}&amp;limit=100&amp;order=asc&amp;related=thread`;
+	if(cursor) url += '&amp;cursor='+cursor;
+	if(!posts) posts = [];
+
+	let resp = await fetch(url);
+	let data = await resp.json();
+	let newPosts = data.response;
+	newPosts.forEach(p =&gt; posts.push(p));
+	// only one per K
+	if(posts.length % 1000 === 0) console.log('Post total is now '+posts.length);
+
+	if(data.cursor &amp;&amp; data.cursor.hasNext) {
+		return getPosts(forum, data.cursor.next, posts);
+	} else return posts;
+}
+</code></pre>
+<p>For the most part this is simply a recursive call to retrieve a 'page' of comments one a time. That's the highest value possible. For my sixty thousand plus comments this took roughly a minute I think. I don't do any data transformation at this part as I figure it would be the slowest. I wanted the data local so that I could then slice and dice it.</p>
+<p>You'll notice a &quot;temp&quot; block in there. I was worried the API would return comments I had deleted (for spam obviously) but I never saw that happen. I'm still not 100% sure that's safe so I'm leaving the block in for now.</p>
+<p>The result is a very, very large JSON file (well for my site anyway) consisting of an array of comments with embedded thread information. Here's one comment:</p>
+<pre><code class="language-js">{
+	&quot;editableUntil&quot;: &quot;2021-02-12T22:37:28&quot;,
+	&quot;dislikes&quot;: 0,
+	&quot;thread&quot;: {
+		&quot;feed&quot;: &quot;https://raymondcamden.disqus.com/building_table_sorting_and_pagination_in_vuejs/latest.rss&quot;,
+		&quot;clean_title&quot;: &quot;Building Table Sorting and Pagination in Vue.js&quot;,
+		&quot;dislikes&quot;: 0,
+		&quot;likes&quot;: 11,
+		&quot;message&quot;: &quot;&quot;,
+		&quot;ratingsEnabled&quot;: false,
+		&quot;isSpam&quot;: false,
+		&quot;isDeleted&quot;: false,
+		&quot;category&quot;: &quot;3375237&quot;,
+		&quot;adsDisabled&quot;: false,
+		&quot;author&quot;: &quot;17736500&quot;,
+		&quot;userScore&quot;: 0,
+		&quot;id&quot;: &quot;6467564608&quot;,
+		&quot;signedLink&quot;: &quot;http://disq.us/?url=http%3A%2F%2Fwww.raymondcamden.com%2F2018%2F02%2F08%2Fbuilding-table-sorting-and-pagination-in-vuejs&amp;key=_egD8dUdRxY70Yph3kSn5A&quot;,
+		&quot;createdAt&quot;: &quot;2018-02-08T22:31:44&quot;,
+		&quot;hasStreaming&quot;: false,
+		&quot;raw_message&quot;: &quot;&quot;,
+		&quot;isClosed&quot;: false,
+		&quot;link&quot;: &quot;http://www.raymondcamden.com/2018/02/08/building-table-sorting-and-pagination-in-vuejs&quot;,
+		&quot;slug&quot;: &quot;building_table_sorting_and_pagination_in_vuejs&quot;,
+		&quot;forum&quot;: &quot;raymondcamden&quot;,
+		&quot;identifiers&quot;: [],
+		&quot;posts&quot;: 114,
+		&quot;userSubscription&quot;: false,
+		&quot;validateAllPosts&quot;: false,
+		&quot;title&quot;: &quot;\n        Building Table Sorting and Pagination in Vue.js\n    &quot;,
+		&quot;highlightedPost&quot;: null
+	},
+	&quot;numReports&quot;: 0,
+	&quot;likes&quot;: 0,
+	&quot;message&quot;: &quot;&lt;p&gt;please mr, how can I add filter to this table, like i want to filter by name&lt;/p&gt;&quot;,
+	&quot;id&quot;: &quot;5256177490&quot;,
+	&quot;createdAt&quot;: &quot;2021-02-05T22:37:28&quot;,
+	&quot;author&quot;: {
+		&quot;name&quot;: &quot;mara&quot;,
+		&quot;url&quot;: &quot;&quot;,
+		&quot;profileUrl&quot;: &quot;&quot;,
+		&quot;emailHash&quot;: &quot;&quot;,
+		&quot;avatar&quot;: {
+			&quot;small&quot;: {
+				&quot;permalink&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar32.png&quot;,
+				&quot;cache&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar32.png&quot;
+			},
+			&quot;large&quot;: {
+				&quot;permalink&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar92.png&quot;,
+				&quot;cache&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar92.png&quot;
+			},
+			&quot;permalink&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar92.png&quot;,
+			&quot;cache&quot;: &quot;//a.disquscdn.com/1611874952/images/noavatar92.png&quot;
+		},
+		&quot;signedUrl&quot;: &quot;&quot;,
+		&quot;isAnonymous&quot;: true
+	},
+	&quot;media&quot;: [],
+	&quot;isSpam&quot;: false,
+	&quot;isDeletedByAuthor&quot;: false,
+	&quot;isHighlighted&quot;: false,
+	&quot;parent&quot;: null,
+	&quot;isApproved&quot;: true,
+	&quot;isDeleted&quot;: false,
+	&quot;isFlagged&quot;: false,
+	&quot;raw_message&quot;: &quot;please mr, how can I add filter to this table, like i want to filter by name&quot;,
+	&quot;isAtFlagLimit&quot;: false,
+	&quot;canVote&quot;: false,
+	&quot;forum&quot;: &quot;raymondcamden&quot;,
+	&quot;url&quot;: &quot;http://www.raymondcamden.com/2018/02/08/building-table-sorting-and-pagination-in-vuejs#comment-5256177490&quot;,
+	&quot;points&quot;: 0,
+	&quot;moderationLabels&quot;: [
+		&quot;anonymous&quot;
+	],
+	&quot;isEdited&quot;: false,
+	&quot;sb&quot;: false
+},
+</code></pre>
+<p>By the way, it totally freaks me out when people call me mister. I mean I get that I'm older (more experienced!) but it still surprises me.</p>
+<p>Ok, so that gives up comments, but what I really want is an object where the top level array is threads and the posts are underneath it. For that, I wrote the second script.</p>
+<pre><code class="language-js">/*
+
+I take the export of getData.js and convert it such that we have an array of thread objects which 
+then contain an array of posts. I remove the .thread key from posts to make it smaller.
+
+*/
+
+const fs = require('fs');
+
+const INPUT = './raymondcamden_rawdata.json';
+const OUTPUT = './raymondcamden_threaddata.json';
+
+console.log(`Reading ${INPUT}`);
+let rawdata = fs.readFileSync(INPUT, 'utf-8');
+let data = JSON.parse(rawdata);
+
+let threads = [];
+
+data.forEach(p =&gt; {
+	index = threads.findIndex(t =&gt; t.id === p.thread.id);
+	if(index === -1) {
+		threads.push(p.thread);
+		delete p.thread;
+		index = threads.length-1;
+		threads[index].posts = [];
+	}
+	threads[index].posts.push(p);
+});
+
+console.log(`Converted to a thread object of size ${threads.length}`);
+fs.writeFileSync(OUTPUT, JSON.stringify(threads), 'utf-8');
+console.log(`Result saved to ${OUTPUT}`);
+</code></pre>
+<p>The logic here is to create new threads when encountered, add the comment to an array inside the thread, and remove the embedded thread. The end result is essentially the same data, but now centered on an array of threads.</p>
+<p>Woot! OK, if all you want to do is export your Disqus comments you can stop reading now.</p>
+<p>Alright, so the next part was tricky. My goal was to create a set of files such that blog post X could import comment file X (when it existed) and display them instead of the Disqus embed. For that, I wrote a script that read in my thread data and wrote out one file per thread. It also applied basic HTML layout to the thread. To help with this, I used a CodePen (<a href="https://codepen.io/cfjedimaster/pen/mdOENXd">this one</a> if your curious) to design something I thought was decent.</p>
+<p>Here's that script:</p>
+<pre><code class="language-js">/*
+I read in the thread-centered data and then output rendered html for each thread.
+
+notes for later - comment examples i like:
+	https://css-tricks.com/how-to-add-commas-between-a-list-of-items-dynamically-with-css/
+	
+*/
+
+const fs = require('fs');
+
+const INPUT = './raymondcamden_threaddata.json';
+const OUTPUT_DIR = './output/';
+
+let threads = JSON.parse(fs.readFileSync(INPUT, 'utf-8'));
+
+// TEMP
+// threads = threads.slice(0,50);
+
+console.log(`Working with ${threads.length} threads.`);
+
+threads.forEach(t =&gt; {
+	//console.log(t.link+' '+t.posts.length);
+	let filename = OUTPUT_DIR + generateFileName(t);
+	let content = generateContent(t.posts);
+	// ensure directory exists
+	let dir = filename.split('/');
+	dir.pop();
+	dir = dir.join('/');
+	fs.mkdirSync(dir, { recursive:true });
+	fs.writeFileSync(filename, content, 'utf-8');
+});
+console.log('Complete.');
+
+/*
+given a thread, determine a strategy for generating a file name. for me, this was
+based on the url, minus the host
+
+changed to .inc so Eleventy wouldn't try to process liquid tags
+*/
+function generateFileName(t) {
+	return t.link.replace('http://www.raymondcamden.com/','') + '.inc';
+}
+
+/*
+Given an array of posts, generate an HTML string. 
+*/
+function generateContent(posts) {
+	let html = '';
+	posts.forEach((p,idx) =&gt; {
+		let parentText = '';
+		if(p.parent) { 
+			let parentNumber = posts.findIndex(post =&gt; post.id == p.parent);
+			//console.log('parentNumber', parentNumber);
+			/*
+			console.log('PARENT', p.parent);
+			console.log(JSON.stringify(p, null, '\t'));
+			*/
+			parentText = `(In reply to &lt;a href=&quot;#c_${p.parent}&quot;&gt;#${parentNumber+1}&lt;/a&gt;) `;
+		}
+		html += `
+&lt;div class=&quot;comment&quot; id=&quot;c_${p.id}&quot;&gt;
+	&lt;div&gt;
+		&lt;img src=&quot;${p.author.avatar.small.permalink}&quot; class=&quot;comment_author_profile_pic&quot;&gt;
+	&lt;/div&gt;
+	&lt;div&gt;
+		&lt;div class=&quot;comment_header&quot;&gt;
+		Comment &lt;a href=&quot;#c_${p.id}&quot;&gt;${idx+1}&lt;/a&gt; ${parentText}by ${p.author.name}
+		posted on ${dateFormat(p.createdAt)}
+		&lt;/div&gt;
+		&lt;div class=&quot;comment_text&quot;&gt;${p.message}&lt;/div&gt;
+	&lt;/div&gt;
+&lt;/div&gt;
+		`;
+	});
+
+	return html;
+}
+
+function dateFormat(d) {
+	d = new Date(d);
+	return new Intl.DateTimeFormat().format(d) + ' at ' + new Intl.DateTimeFormat('en-US', {hour:'numeric',minute:'2-digit'}).format(d);
+}
+</code></pre>
+<p>A few things to note. The function <code>generateFileName</code> uses the <code>link</code> value from the comment to create a file name based on the URL of the blog post. I originally used a <code>.html</code> extension because they're HTML files, but I discovered that some of my comments had code in them that broke Liquid rendering in Eleventy. By simply renaming it I avoided the issue.</p>
+<p>The end result of this was a <em>bunch</em> of folders and files that mimicked my blog:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/d2.jpg" alt="Folder/file view of output" class="lazyload imgborder imgcenter">
+</p>
+<p>The next thing I want to point out is the use of <code>parentText</code>. Disqus supports deep comment threading. In order to keep my sanity, I decided I'd simply present them in a single list of comments, but to flag (and link) to parent posts. Let me be clear, this is not the best solution by a long run, but it felt like a reasonable compromise.</p>
+<p>I copied this into my repo inside the <code>_includes</code> folder... and surprisingly, this is where things got dicey. You see, I needed to import comments into each blog post but a) the import was dynamic and b) would only be done when the file actually existed, since not every post had comments.</p>
+<p>I was not able to get dynamic includes working so I worked around it a bit. What follows is my solution for Eleventy but you should absolutely take this with a grain of salt. First, the include used for comments itself:</p>
+<pre><code class="language-html">{% capture hasComments %}{% hasAnyComments page.url, oldurl %}{% endcapture %}
+
+{% if hasComments == &quot;true&quot; %}
+&lt;div class=&quot;comments-area&quot;&gt;
+	&lt;div class=&quot;comments-inner&quot;&gt;
+	&lt;h3&gt;Archived Comments&lt;/h3&gt;
+    {% commentInclude page.url, oldurl %}
+    &lt;/div&gt;
+&lt;/div&gt;
+{% endif %}
+
+</code></pre>
+<p>From the top, I use a short code to figure out if a page has comments. I pass two arguments, the URL and OLDURL, which relates to a hack I have for <em>very</em> old blog posts on my site. I'd say just ignore that old url thing for now.</p>
+<p>If I have comments, I then use <em>another</em> short code to include them. This comes from not being able to do a dynamic include. Here's both short codes from <code>.eleventy.js</code> file:</p>
+<pre><code class="language-js">eleventyConfig.addShortcode(&quot;hasAnyComments&quot;, function(e, old) {
+	return getCommentText(e,old) !== '';
+});
+
+eleventyConfig.addShortcode(&quot;commentInclude&quot;, function(e, old) {
+	return getCommentText(e,old);
+});
+
+//later in the file...
+
+/*
+I support hasAnyComments and commentInclude. I take the logic of trying to load
+old comment html. I return either the html or a blank string
+*/
+function getCommentText(path, old) {
+    path = './_includes/comments'+path+'.inc';
+    let oldpath = '';
+    if(old) oldpath = './_includes/comments' + old.replace('http://www.raymondcamden.com','') + '.inc';
+    if(fs.existsSync(path)) {
+      return fs.readFileSync(path,'utf-8');
+    } else if(old &amp;&amp; fs.existsSync(oldpath)) {
+      return fs.readFileSync(oldpath,'utf-8');
+    } else {
+      return '';
+    }
+}
+</code></pre>
+<p>It's basically a quick check to see if a file exists and returning it when it does. This could be written probably much better, as always, but it worked. You can see an example on <a href="https://www.raymondcamden.com/2021/01/12/remembering-and-restoring-a-route-with-vue-router">this post</a>.</p>
+<p>For source code, you can find the Disqus stuff here: <a href="https://github.com/cfjedimaster/disqus-analytics/tree/master/export_research">https://github.com/cfjedimaster/disqus-analytics/tree/master/export_research</a>. The repo for this site may be found here: <a href="https://github.com/cfjedimaster/raymondcamden2020">https://github.com/cfjedimaster/raymondcamden2020</a></p>
+<p>After mentioning what I was doing on Twitter, I got not one but two replies for folks who have done similar things. First is Zach (Eleventy creator) here: <a href="https://www.zachleat.com/web/disqus-import/">Import Your Disqus Comments To Eleventy</a>/ And here is Nicolas Hoizey here: <a href="https://nicolas-hoizey.com/articles/2017/07/27/so-long-disqus-hello-webmentions/#comments-history-is-not-lost">Comments history is not lost!</a>. Note that Nicolas also talks about adding Webmention. I'll be there soon - got some stuff brewing which explains why I've been a bit quiet here. :)</p>
+<p><span>Photo by <a href="https://unsplash.com/@rhythm596?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Rhythm Goyal</a> on <a href="https://unsplash.com/s/photos/comments?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

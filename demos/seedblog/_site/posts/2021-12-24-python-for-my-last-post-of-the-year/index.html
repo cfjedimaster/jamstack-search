@@ -1,0 +1,63 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Python for My Last Post of the Year...</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Python for My Last Post of the Year...</h2>
+<p>
+Written: 12/24/2021
+</p>
+
+
+<p>For the last post of the year (probably, I'm off next week with very little on my calendar so I hope to spend a lot of time doing nothing, not blogging) I thought I'd share a quick Python function. This function is inspired by my favorite Christmas movie, <a href="https://www.imdb.com/title/tt0085334/">&quot;A Christmas Story&quot;</a>. In one of the more pivotal scenes, one character dares another to stick their tongue on a cold pole. You see, one of the characters said their dad stated that sticking their tongue on cold metal would result in the tongue sticking. The other character didn't believe it. As you can imagine, disaster unfolds.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/12/pole_post.jpg" alt="Tongue stuck to cold post, shot from A Christmas Story" class="lazyload imgborder imgcenter">
+</p>
+<p>In this scene, the character goading the other to stick his tongue on the pole uses progressively more serious &quot;dares&quot;, so for example, first a dare, then a double dare, and so forth.</p>
+<p>At one point the character goes from &quot;double dog dare&quot; to &quot;triple dog dare&quot;, and the narrator mentions how it's a slight breach of etiquette.</p>
+<p>For some reason, I thought it would be fun to write a Python checker that lets you take two &quot;dares&quot; and determines if it's a valid &quot;raise&quot;. So for example, &quot;double dare&quot; is a valid raise from &quot;dare&quot;. As is &quot;double dog dare&quot;, even though it skips a few levels. But &quot;dare&quot; would not be a valid raise from &quot;triple dare&quot; as that goes down in - well, &quot;dare-osity&quot;?</p>
+<p>Pointless, I know. But I wrote it:</p>
+<pre><code class="language-python">def validDareRaise(initialDare, newDare):
+	# define valid date values
+	validDares = [&quot;dare&quot;, &quot;double dare&quot;, &quot;double dog dare&quot;, &quot;triple dare&quot;, &quot;triple dog dare&quot;]
+	
+	# First, are the dares valid
+	if validDares.count(initialDare) == 0 or validDares.count(newDare) == 0:
+		return False
+
+	return validDares.index(initialDare) &lt; validDares.index(newDare)
+</code></pre>
+<p>First I validate both the initial and new dare. If either are invalid, I return false. Note that you can't use the Python <code>index</code> list method as it returns an error if an element doesn't exist. Then I can simply return a True/False bases on if the first dare's index value is less than the second (equality is not allowed).</p>
+<p>Here's a few simple tests:</p>
+<pre><code class="language-python">print(&quot;valid dare raise: cat, double dare:&quot;, validDareRaise(&quot;cat&quot;, &quot;double dare&quot;))
+print(&quot;valid dare raise: dare, dog:&quot;, validDareRaise(&quot;dare&quot;, &quot;dog&quot;))
+
+print(&quot;valid dare raise: dare, double dare:&quot;, validDareRaise(&quot;dare&quot;, &quot;double dare&quot;))
+print(&quot;valid dare raise: double dare, dare:&quot;, validDareRaise(&quot;double dare&quot;,&quot;dare&quot;))
+print(&quot;valid dare raise: double dog dare, triple dog dare:&quot;, validDareRaise(&quot;double dog dare&quot;, &quot;triple dog dare&quot;))
+</code></pre>
+<p>And the output:</p>
+<pre><code class="language-bash">valid dare raise: cat, double dare: False
+valid dare raise: dare, dog: False
+valid dare raise: dare, double dare: True
+valid dare raise: double dare, dare: False
+valid dare raise: double dog dare, triple dog dare: True
+</code></pre>
+<p>And that's it. By the way, I was searching my blog content for Python stuff and discovered that sometime back in 2007 I stated that Python just looked &quot;wrong&quot; to me. Wow. Oh, and a few years after that I casually mentioned trying to learn it. I guess that went nowhere. I've said it before and I'll say it again - Python is the first language I've truly been excited about in a very long time. I love it!</p>
+<p>Photo by <a href="https://unsplash.com/@frostroomhead?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Rodion Kutsaev</a> on <a href="https://unsplash.com/s/photos/christmas?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

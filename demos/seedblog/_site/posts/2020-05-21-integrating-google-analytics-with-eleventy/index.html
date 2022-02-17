@@ -1,0 +1,379 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Integrating Google Analytics with Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Integrating Google Analytics with Eleventy</h2>
+<p>
+Written: 5/20/2020
+</p>
+
+
+<p>Before I begin, this article is <em>not</em> about adding Google Analytics to your site. Google provides a HTML/JS snippet you can just copy and paste into your code and that's about as simple as you can get. For Eleventy, you would do this in your main layout file so it's include everywhere. There ya go, if that's what you wanted, you can stop reading. ;) This article is about how to integrate Google Analytics <em>data</em> into your site, and is a followup to the <a href="https://www.raymondcamden.com/2020/05/18/integrating-netlify-analytics-and-eleventy">blog post</a> I did earlier this week demonstrating how to do that with Netlify Analytics.</p>
+<p>Hopefully you've read that previous article as this one will follow a similar pattern. As with most things Google API related, I spent a huge amount of time with authentication and authorization issues and much less time using their API. It's gotten a point where I dread working with their APIs. Not because their APIs don't work well, but because authentication seems to be so difficult, especially if you're not using OAuth. Alright, enough of a rant, let's do this.</p>
+<h2>Getting the Analytics</h2>
+<p>Google Analytics has a <a href="https://developers.google.com/analytics/devguides/reporting/core/v4">REST API</a> that lets you get any reporting information out via API calls that you would have available via the dashboard. Using it in a Node.js environment requires you to first create a service account. Generate the JSON key for that account and save it to your file system. (I'll use the file system for this information in the first portion of the article, and then talk about how to move away from that.)</p>
+<p>Next, you'll want to install the <code>googleapis</code> package. This contains wrappers for all of their supported APIs.</p>
+<p>Now for the crucial part. When you create a service account, it will include an email address in the data. It will look something like this:</p>
+<pre><code class="language-js">&quot;client_email&quot;: &quot;damnga@myprojectname.iam.gserviceaccount.com&quot;,
+</code></pre>
+<p>Yes, &quot;damnga&quot; is &quot;damn google analytics&quot; - I was frustrated. Copy the email address, go to your Google Analytics dashboard, and add it as a user to the property your working with. This can be done via the Admin link.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/ga1.png" alt="View User Management" class="lazyload imgborder imgcenter">
+</p>
+<p>All it needs is &quot;Read &amp; Analyze&quot; permissions. While in your dashboard, also click the &quot;View Settings&quot; link and get your View ID:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/ga2.png" alt="View ID" class="lazyload imgborder imgcenter">
+</p>
+<p>Alright, once you've done that, let's look at the code, bit by bit at first. Start off initializing the library:</p>
+<pre><code class="language-js">const {google} = require('googleapis');
+let creds = require('./credentials4.json');
+
+
+const auth = new google.auth.GoogleAuth({
+	credentials:creds,
+	scopes: ['https://www.googleapis.com/auth/analytics.readonly']
+});
+
+const ap = google.analyticsreporting({
+	version:'v4',
+	auth:auth
+});
+</code></pre>
+<p>Now you're ready to make reports. The API supports batching so you can ask for multiple things at once. In general most Google APIs are simple once you've gotten past the auth part, but the Analytics API is rather complex. I wanted a report over the past seven days of page views. Here's how I did it:</p>
+<pre><code class="language-js">const res = await ap.reports.batchGet({
+requestBody: {
+	reportRequests: [
+	{
+		viewId: '73496341',
+		dateRanges: [
+		{
+			startDate: '7daysAgo',
+			endDate: 'yesterday',
+		},
+		],
+		dimensions:[
+		{ &quot;name&quot;: 'ga:pagePath' },
+		],
+		metrics: [
+		{
+			expression: 'ga:pageviews',
+		},
+		],
+		orderBys:[
+		{ fieldName: &quot;ga:pageviews&quot;, sortOrder:'DESCENDING' }
+		],
+		pageSize:10
+	},
+	],
+},
+});
+</code></pre>
+<p>From what I can gather, <code>metrics</code> is what you are asking for and <code>dimensions</code> is what you want back, in this case a report of the path that generated the page views. I do sorting and limiting as well. The result data is complex as well. I'll share it here but feel free to skim it:</p>
+<pre><code class="language-js">{
+	&quot;rows&quot;: [
+		{
+			&quot;dimensions&quot;: [
+				&quot;/article/perform-date-manipulations-based-on-adding-or-subtracting-time/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;153&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;41&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/article/create-a-random-nonce-string-using-javascript/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;16&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/all/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;8&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/article/traversing-dom-subtrees-with-recursive-walk-the-dom-function/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;7&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/article/check-if-a-value-is-an-array/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;5&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/tag/array/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;5&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/article/map-a-nodelist-to-an-array-of-properties/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;3&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/submit/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;3&quot;
+					]
+				}
+			]
+		},
+		{
+			&quot;dimensions&quot;: [
+				&quot;/tag/math/&quot;
+			],
+			&quot;metrics&quot;: [
+				{
+					&quot;values&quot;: [
+						&quot;3&quot;
+					]
+				}
+			]
+		}
+	],
+	&quot;totals&quot;: [
+		{
+			&quot;values&quot;: [
+				&quot;275&quot;
+			]
+		}
+	],
+	&quot;rowCount&quot;: 30,
+	&quot;minimums&quot;: [
+		{
+			&quot;values&quot;: [
+				&quot;1&quot;
+			]
+		}
+	],
+	&quot;maximums&quot;: [
+		{
+			&quot;values&quot;: [
+				&quot;153&quot;
+			]
+		}
+	]
+}
+</code></pre>
+<p>I turned this into simpler data like so:</p>
+<pre><code class="language-js">let report = res.data.reports[0].data;
+let data = report.rows.map(r =&gt; {
+return { path: r.dimensions[0], views: r.metrics[0].values[0]};
+});
+</code></pre>
+<p>Which gives me the simpler:</p>
+<pre><code class="language-js">[
+	{
+		&quot;path&quot;: &quot;/article/perform-date-manipulations-based-on-adding-or-subtracting-time/&quot;,
+		&quot;views&quot;: &quot;153&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/&quot;,
+		&quot;views&quot;: &quot;41&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/article/create-a-random-nonce-string-using-javascript/&quot;,
+		&quot;views&quot;: &quot;16&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/all/&quot;,
+		&quot;views&quot;: &quot;8&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/article/traversing-dom-subtrees-with-recursive-walk-the-dom-function/&quot;,
+		&quot;views&quot;: &quot;7&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/article/check-if-a-value-is-an-array/&quot;,
+		&quot;views&quot;: &quot;5&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/tag/array/&quot;,
+		&quot;views&quot;: &quot;5&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/article/map-a-nodelist-to-an-array-of-properties/&quot;,
+		&quot;views&quot;: &quot;3&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/submit/&quot;,
+		&quot;views&quot;: &quot;3&quot;
+	},
+	{
+		&quot;path&quot;: &quot;/tag/math/&quot;,
+		&quot;views&quot;: &quot;3&quot;
+	}
+]
+</code></pre>
+<p>Woot. That worked, now let's get this into Eleventy!</p>
+<h2>Integrating with Eleventy</h2>
+<p>As with my <a href="https://www.raymondcamden.com/2020/05/18/integrating-netlify-analytics-and-eleventy">previous demo</a>, I moved my Node code into an Eleventy <code>_data</code> file called <code>popularpages.js</code>. Here it is:</p>
+<pre><code class="language-js">require('dotenv').config();
+
+const {google} = require('googleapis');
+let creds = JSON.parse(process.env.GOOGLE_AUTH);
+
+const auth = new google.auth.GoogleAuth({
+	credentials:creds,
+	scopes: ['https://www.googleapis.com/auth/analytics.readonly']
+});
+
+const ap = google.analyticsreporting({
+	version:'v4',
+	auth:auth
+});
+
+module.exports = function() {
+
+	return new Promise(async (resolve, reject) =&gt; {
+
+		const res = await ap.reports.batchGet({
+			requestBody: {
+			reportRequests: [
+				{
+				viewId: '73496341',
+				dateRanges: [
+					{
+					startDate: '7daysAgo',
+					endDate: 'yesterday',
+					},
+				],
+				dimensions:[
+					{ &quot;name&quot;: 'ga:pagePath' },
+				],
+				metrics: [
+					{
+					expression: 'ga:pageviews',
+					},
+				],
+				orderBys:[
+					{ fieldName: &quot;ga:pageviews&quot;, sortOrder:'DESCENDING' }
+				],
+				pageSize:10
+				},
+			],
+			},
+		});
+
+		let report = res.data.reports[0].data;
+		let data = report.rows.map(r =&gt; {
+			return { path: r.dimensions[0], views: r.metrics[0].values[0]};
+		}).filter(d =&gt; {
+			if(d.path.indexOf('article') === -1) return false;
+			return true;
+		});;
+
+		resolve(data);
+
+	});
+
+};
+</code></pre>
+<p>Outside of &quot;shaping&quot; it into the format Eleventy wants, there's two main changes. First, I load in my Google auth via an environment variable. I took the JSON, removed the line breaks, and set it as an environment variable locally and as an environment variable in my Netlify site settings.</p>
+<p>The second change is the <code>filter</code> call. For the site in question (<a href="https://www.javascriptcookbook.com">JavaScript Cookbook</a>), I only wanted to show popular articles and not include tag pages or other pages. As with the last example, this is the part you would want to tweak for your own needs.</p>
+<p>Then I put it on my home page.</p>
+<pre><code class="language-html">&lt;h3&gt;Popular Articles&lt;/h3&gt;
+
+{% for article in popularpages limit:5 %}
+	{% assign articleData = article.path | toData: collections.articles %}
+	&lt;a href=&quot;{{article.path}}&quot;&gt;{{articleData.title}}&lt;/a&gt; - {% dateFormat articleData.published %}&lt;br/&gt;
+{% endfor %}
+</code></pre>
+<p>The <code>toData</code> filter there is how I &quot;translate&quot; a path into the proper Eleventy data including the title and publication date. While the filter is pretty much the same as my previous example, here it is:</p>
+<pre><code class="language-js">let titleArticleCache = {};
+eleventyConfig.addFilter('toData', (p, articles) =&gt; {
+	if(titleArticleCache[p]) return titleArticleCache[p];
+	for(let i=0;i&lt;articles.length;i++) {
+		if(articles[i].url == p) {
+		titleArticleCache[p] = { title: articles[i].data.title, published: articles[i].data.published};
+		return titleArticleCache[p];
+		}
+	}
+	// cache that we couldn't match
+	titleArticleCache[p] = { title: ''};
+	return titleArticleCache[p];
+});
+</code></pre>
+<p>And here's how it looks:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/ga3.png" alt="Example output" class="lazyload imgborder imgcenter">
+</p>
+<p>You can see it live at the <a href="https://www.javascriptcookbook.com/">JavaScript Cookbook</a> and the complete code at the GitHub repo: <a href="https://github.com/cfjedimaster/javascriptcookbookstatic">https://github.com/cfjedimaster/javascriptcookbookstatic</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

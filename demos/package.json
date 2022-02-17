@@ -1,0 +1,16 @@
+{
+  "name": "demos",
+  "version": "1.0.0",
+  "description": "",
+  "main": "gather.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "glob": "^7.2.0",
+    "glob-promise": "^4.2.2"
+  }
+}

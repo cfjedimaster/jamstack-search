@@ -1,0 +1,73 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Preventing Multiple Form Submissions</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Preventing Multiple Form Submissions</h2>
+<p>
+Written: 11/16/2020
+</p>
+
+
+<p>Good morning! Before I begin, a quick note. I was about to write this post yesterday when I discovered that it was actually very close to another one I wrote a few months back, which was my very first <a href="https://www.raymondcamden.com/tags/vue+quick+shot">Vue Quick Shot</a> - <a href="https://www.raymondcamden.com/2020/03/02/vue-quick-shot-disabling-a-submit-button-while-waiting-for-an-ajax-call">&quot;Vue Quick Shot - Disabling a Submit Button While Waiting for an Ajax Call&quot;</a>.</p>
+<p>In that post, I describe how to modify a form that performs a network call to an API such that you can't submit the request until the first request is done. Today's post is very similar. I was inspired by a post earlier this week on the topic, <a href="https://www.bram.us/2020/11/04/preventing-double-form-submissions/">&quot;HTML Forms: How (and Why) to Prevent Double Form Submissions&quot;</a>.</p>
+<p>In today's post, the difference is rather slight. Instead of a form used to collect data before making an Ajax call, it's going to be a &quot;regular&quot; form that just posts to an action, leaving the current page completely. The solution is incredibly similar, but as it's my blog I figure I'm allowed to do that. ;)</p>
+<p>I also want to point out that if this is the <em>only</em> thing you're doing on a page, Vue's going to be overkill. Just use vanilla JS instead (and see my note at the end). But if you're already using Vue,perhaps for some complex client-side validation, then the following tip will help.</p>
+<p>I started off building a <a href="https://pipedream.com/@raymondcamden/slow-html-form-test-p_LQCq6z/edit">Pipedream workflow</a> that merely outputs HTML after a four second wait. This You can test this yourself if you view it yourself: <a href="https://enz7ceue7sb4c7j.m.pipedream.net">https://enz7ceue7sb4c7j.m.pipedream.net</a>. I'm not doing any form validation or handling, I'm just waiting four seconds and responding.</p>
+<p>I then built a simple form:</p>
+<pre><code class="language-html">&lt;form action=&quot;https://enz7ceue7sb4c7j.m.pipedream.net/&quot; method=&quot;post&quot;&gt;
+  &lt;label for=&quot;name&quot;&gt;Name:&lt;/label&gt;
+  &lt;input type=&quot;text&quot; name=&quot;name&quot; id=&quot;name&quot;&gt;
+  &lt;input type=&quot;submit&quot;&gt;
+&lt;/form&gt;
+</code></pre>
+<p>And then I submitting the form, clicking rapidly to send multiple requests. Pipedream records executions of workflows, and I could see multiple firing at once:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/11/pd1.png" alt="List of multiple executions" class="lazyload imgborder imgcenter">
+</p>
+<p>So let's fix it! Again, I want to stress that if this is the only thing you're doing on a page, Vue is going to be overkill. First, I modified the HTML a bit:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  
+  &lt;form action=&quot;https://enz7ceue7sb4c7j.m.pipedream.net/&quot; method=&quot;post&quot; @submit=&quot;setSubmitting&quot;&gt;
+    &lt;label for=&quot;name&quot;&gt;Name:&lt;/label&gt;
+    &lt;input type=&quot;text&quot; name=&quot;name&quot; id=&quot;name&quot;&gt;
+    &lt;input type=&quot;submit&quot; :disabled=&quot;submitting&quot;&gt;
+  &lt;/form&gt;
+  
+&lt;/div&gt;
+</code></pre>
+<p>I've got a <code>submit</code> handler on the form and my submit button has a <code>disabled</code> property tied to a variable. And then here's the simple Vue.js code:</p>
+<pre><code class="language-js">const app = new Vue({
+  el:'#app',
+  data:{
+    submitting:false
+  },
+  methods: {
+    setSubmitting() { 
+      this.submitting = true; 
+    }
+  }
+})
+</code></pre>
+<p>Yeah, pretty trivial. But effective. Test it out here:</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="html,result" data-user="cfjedimaster" data-slug-hash="QWEoBpX" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Block Multiple Submission">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/QWEoBpX">
+  Block Multiple Submission</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

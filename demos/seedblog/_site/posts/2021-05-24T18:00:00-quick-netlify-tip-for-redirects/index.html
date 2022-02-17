@@ -1,0 +1,46 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Quick Netlify Tip for Redirects</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Quick Netlify Tip for Redirects</h2>
+<p>
+Written: 5/24/2021
+</p>
+
+
+<p>Since this just bit me in the butt - for the second time - I figured I'd do a real quick blog post. This isn't to help me remember, but to ensure it comes up next time I google for it.</p>
+<p>I was working on a local <a href="https://www.11ty.dev/">11ty</a> site with the Netlify CLI dev command. For folks who don't know, this lets you simulate the Netlify environment locally. While a great tool, you sometimes run into issues where things behave differently locally compared to production.</p>
+<p>For me, I ran into just such an issue Saturday morning. I had set up a simple <code>_redirects</code> file to support giving my serverless functions a nicer, and simpler, path:</p>
+<pre><code>/api/*	/.netlify/functions/:splat	200
+</code></pre>
+<p>This worked locally just fine, but in production, I kept getting a 404. Also, when I looked at my deploy log, I saw a message stating that no redirect rules were processed. On a whim, I duplicated my redirect in my <code>netlify.toml</code> file, deployed, and it woked fine.</p>
+<p>I <a href="https://answers.netlify.com/t/redirects-not-being-processed-in-production-works-fine-locally/38106">posted</a> on the Netlify forums, and after some back and forth, a Netlify support person asked if my <code>_redirects</code> file was in the published directory. I'm using Eleventy and for non-supported files, you need to tell it to explicitly copy the file to output. This is done with one simple command (I'm sharing a few just to give you more examples):</p>
+<pre><code class="language-js">eleventyConfig.addPassthroughCopy(&quot;css&quot;);
+eleventyConfig.addPassthroughCopy(&quot;js&quot;);
+eleventyConfig.addPassthroughCopy(&quot;images&quot;);
+eleventyConfig.addPassthroughCopy(&quot;fonts&quot;);
+eleventyConfig.addPassthroughCopy(&quot;_redirects&quot;);
+</code></pre>
+<p>As soon as I did that, and deployed, it worked perfectly. I do find it odd that a <code>netlify.toml</code> file in the root of my project works fine, even though it's not copied to output, but <code>_redirects</code> has to be copied for it to work. I think it should be consistent.</p>
+<p>Anyway - as I said - this hit me twice now so hopefully I won't forget.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/05/he_will_forget.jpg" alt="Spoiler: He will forget" class="lazyload imgborder imgcenter">
+</p>
+<p>Photo by <a href="https://unsplash.com/@jamietempleton?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Jamie Templeton</a> on <a href="https://unsplash.com/s/photos/directions?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

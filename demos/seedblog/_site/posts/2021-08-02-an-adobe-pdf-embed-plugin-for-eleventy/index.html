@@ -1,0 +1,50 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>An Adobe PDF Embed Plugin for Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>An Adobe PDF Embed Plugin for Eleventy</h2>
+<p>
+Written: 8/2/2021
+</p>
+
+
+<p>I've covered in the past how to use the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">Adobe PDF Embed API</a> with Eleventy (<a href="https://www.raymondcamden.com/2021/02/25/using-pdfs-with-the-jamstack">&quot;Using PDFs with the Jamstack&quot;</a>). While the Embed API is relatively simple to add to a page, I thought it would be kind of fun to build an Eleventy plugin to make it simpler. Last week, I released it: <a href="https://www.npmjs.com/package/eleventy-plugin-pdfembed">https://www.npmjs.com/package/eleventy-plugin-pdfembed</a>.</p>
+<p>To use it, first add the plugin via npm to your Eleventy project:</p>
+<pre><code>npm i eleventy-plugin-pdfembed
+</code></pre>
+<p>Then, in your <code>.eleventy.js</code> file, require it and add it:</p>
+<pre><code class="language-js">const pluginPDFEmbed = require('eleventy-plugin-pdfembed');
+
+module.exports = (eleventyConfig) =&gt; {
+
+	// more stuff here
+
+	eleventyConfig.addPlugin(pluginPDFEmbed, {
+		key: '&lt;YOUR CREDENTIAL KEY&gt;'
+	});
+
+}
+</code></pre>
+<p>To use it you'll need to get your <a href="https://www.adobe.com/go/dcsdks_credentials">credentials</a> first, which are free. Also keep in mind that your credentials are host based, so most likely you'll want to use an environment variable for it.</p>
+<p>Once done, you can then use the shortcode. It takes an argument for the URL at minimum, but you can also specify the viewing mode. Here's a simple example:</p>
+<pre><code>{% pdfembed 'https://documentcloud.adobe.com/view-sdk-demo/PDFs/Bodea Brochure.pdf' %}
+</code></pre>
+<p>The plugin takes a second argument for viewing mode which is best demonstrated at our <a href="https://www.adobe.com/go/pdfEmbedAPI_demo">online demo</a>. Finally, a third argument lets you rename the default ID value used for the div that renders the PDF. This defaults to <code>adobe-pdf-view</code> if you want to tweak the size via CSS.</p>
+<p>Anyway, let me know if this helps!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

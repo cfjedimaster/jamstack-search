@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Uploading a File</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Uploading a File</h2>
+<p>
+Written: 9/19/2020
+</p>
+
+
+<p>Welcome to the last Vue <a href="https://www.raymondcamden.com/tags/vue+quick+shot/">Quick Shot</a>, and when I say last, I mean the last one I've got in my queue of blog ideas. Today's tip demonstrates how a Vue application can upload a file via a form post operation. I started off with an incredibly simple form - one text field and one file field.</p>
+<pre><code class="language-html">&lt;form method=&quot;post&quot; enctype=&quot;multipart/form-data&quot; action=&quot;https://postman-echo.com/post&quot;&gt;
+	Text field: &lt;input type=&quot;text&quot; name=&quot;something&quot;&gt;&lt;br/&gt;
+	File field: &lt;input type=&quot;file&quot; name=&quot;fileToUpload&quot;&gt;&lt;br/&gt;
+	&lt;input type=&quot;submit&quot;&gt;
+&lt;/form&gt;
+</code></pre>
+<p>How can we convert this to let Vue take over and do the post for us?</p>
+<p>First, I did some modifications to the HTML:</p>
+<pre><code class="language-html">&lt;form method=&quot;post&quot; enctype=&quot;multipart/form-data&quot; 
+      @submit.prevent=&quot;upload&quot;&gt;
+	Text field: &lt;input type=&quot;text&quot; v-model=&quot;something&quot;&gt;&lt;br/&gt;
+	File field: &lt;input type=&quot;file&quot; ref=&quot;fileToUpload&quot;&gt;&lt;br/&gt;
+	&lt;input type=&quot;submit&quot; :disabled=&quot;uploading&quot;&gt;
+&lt;/form&gt;
+</code></pre>
+<p>First, I specified a submit action as well as ensure it prevented the default behavior. I then changed the text field to use v-model. I did not do the same for the file type because file types are a bit special when it comes to Vue. Instead of using v-model, I used the <code>ref</code> attribute so I could read the data manually later. (Basically, you can't use v-model because Vue, or JavaScript in general, can't write to a file field type for security reasons.) The last change was to add a <code>disabled</code> attribute so I can prevent multiple submissions of the form while data is uploading.</p>
+<p>Now let's look at the Vue side. Here's the entire script:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data: {
+    uploading:false,
+    something:'',
+    result:null
+  },
+  methods: {
+    async upload() {
+      
+      this.uploading = true;
+      let data = new FormData();
+      data.append(&quot;something&quot;, this.something);
+      if(this.$refs.fileToUpload.files.length) {
+        data.append(&quot;fileToUpload&quot;, this.$refs.fileToUpload.files[0]);
+      }
+ 
+      let resp = await fetch('https://23198ad96949.ngrok.io/', {
+        method: 'POST',
+        body: data
+      });
+      this.result = await resp.json();
+      this.uploading = false;
+    }
+  }
+})
+</code></pre>
+<p>For data, I've got one data value for the text field, a boolean to flag when uploading, and a result value. The <code>upload</code> method makes use of <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch">Fetch</a> API and FormData. Fetch makes it super easy to different types of network calls and FormData makes it easy to build a form post request. The only weird thing possibly is how I address the file field: <code>this.$refs.fileToUpload.files[0]</code>. The <code>this.$refs.fileToUplaod</code> part simply connects to the file field in the DOM. The <code>files[0]</code> aspect handles references selected files in the field. It's an array because you can add <code>multiple</code> to a file field and then the user can select multiple files.</p>
+<p>I post to a local Node server I had running via <a href="https://ngrok.com/">ngrok</a>, a super-useful tool that lets you expose servers running on your local development machine. Because this is a temporary tunnel, my code will not actually work for you, so please keep that in mind when playing with my CodePen below.</p>
+<p>My Node server simply echoes data back that I render as is in the template. Here's an example of how that looks:</p>
+<pre><code class="language-js">{ 
+	&quot;fields&quot;: { &quot;something&quot;: &quot;p&quot; }, 
+	&quot;files&quot;: { &quot;fileToUpload&quot;: 
+		{ &quot;size&quot;: 515954, 
+			&quot;path&quot;: &quot;/tmp/upload_390d2c9ac7149c559f85ba934f996dde&quot;, 
+			&quot;name&quot;: &quot;Untitled.png&quot;, 
+			&quot;type&quot;: &quot;image/png&quot;, 
+			&quot;mtime&quot;: &quot;2020-09-19T17:29:44.644Z&quot; 
+		} 
+	} 
+}
+</code></pre>
+<p>In a real application you wouldn't do that of course. In the end though, Fetch and FormData do all the heavy work for us! Here's the complete application below, and please remember that you won't be able to actually submit.</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="GRZYBMw" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue File Upload Test">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/GRZYBMw">
+  Vue File Upload Test</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

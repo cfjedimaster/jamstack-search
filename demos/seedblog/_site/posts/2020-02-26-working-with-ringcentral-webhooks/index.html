@@ -1,0 +1,131 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Working with RingCentral Webhooks</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Working with RingCentral Webhooks</h2>
+<p>
+Written: 2/25/2020
+</p>
+
+
+<p>As you know, I've been playing around with <a href="https://developers.ringcentral.com/">RingCentral</a> lately. While working on another idea (for another post of course), I ran into some difficulty getting their webhook support working. While everything <em>is</em> documented, it didn't quite make sense to me and I had to get it working myself before I actually believed it worked. So with that in mind, here's how I got webhooks with RingCentral working.</p>
+<h3>Stuff to Know First</h3>
+<p>First off, take a look at the docs for <a href="https://developers.ringcentral.com/guide/notifications/manual/webhooks">Webhooks</a> on their platform. In some platforms, you simply specify a URL to hit for a webhook and you're good to go. RingCentral requires you to register a webhook via an API call.</p>
+<p>In order to use webhooks, your application has to enable that permission (this is under your app, Settings, OAuth Settings):</p>
+<img src="https://static.raymondcamden.com/images/2020/02/wh1.png" alt="Screen shot of the UI to add permissions" class="imgborder imgcenter">
+<p>Next, note that your webhook must be up and running before you register it. That's not necessarily a bad thing, but it was kind of surprising. In most cases a platform just assumes your URL will work and leaves it it up to you.</p>
+<p>When registering your webhook, RingCentral is going to pass a header, <code>validation-token</code>, and if it exists, your webhook has to echo it back in a header and end the request.</p>
+<p>To register a webhook, you tell RingCentral what events you care about. Getting that list was a bit difficult. If I read the docs right, the event is basically the same as the API related to that event. My code was working with voicemails, so I used this value: <code>/restapi/v1.0/account/~/extension/~/voicemail</code>.</p>
+<p>Now for the last bit, and this is the part I really don't like. When you register a webhook, it isn't permanent. No, it expires after a time. If you want, you can actually specify that you want the service to hit your webhook when it expires. And I guess you... just re-enable it again? Honestly I don't quite get this part. Maybe it's a security setting, but honestly it feels like a lot of burden on the developer. It's already difficult to setup the webhook compared to other services which just let you type in a URL, and this feels like pouring salt in the wound a bit. Now, there may be a <em>very</em> good reason for this setup.</p>
+<p>Ok, good news! So I was about to post to a forum thread where I asked why this was necessary (<a href="https://forums.developers.ringcentral.com/questions/9774/purpose-of-webhook-expiration.html">https://forums.developers.ringcentral.com/questions/9774/purpose-of-webhook-expiration.html</a>), and it turns out the API to register a webhook supports an <code>expiresIn</code> value that can be set to as high as 20 years. As <a href="https://forums.developers.ringcentral.com/users/16525/phong1426275020.html">Phong Vu</a> explains, instead of trying to listen for a callback saying the webhook expired, if you know the exact time it will expire, you could just schedule the re-register yourself.</p>
+<p>So this is good! I still think RingCentral should support a &quot;never expire&quot; option, but I can deal with twenty years.</p>
+<h3>The Code</h3>
+<p>What follows is &quot;Get it Working&quot; code. You should not consider this production ready unless your production system is run by these fine people:</p>
+<img src="https://static.raymondcamden.com/images/2020/02/fraggles.jpg" alt="Fraggle Rock FTW!" class="imgborder imgcenter">
+<p>My code consists of two parts. First, I wrote a simple Node server with Express to handle my webhook. RingCentral has a <a href="https://developers.ringcentral.com/guide/notifications/quick-start/webhook/node">Node example</a> as well but I wanted to use Express because, well, I always use Express when I do server stuff. That being said, I realized today I had not used Express in ages. Serverless has made me a bit lazy. So again, do not consider this code to best practice. Here's my webhook which handles the validation and then just logs the incoming request.</p>
+<pre><code class="language-js">//import dependencies
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+
+// define the Express app
+const app = express();
+
+// enhance your app security with Helmet
+app.use(helmet());
+
+// use bodyParser to parse application/json content-type
+app.use(bodyParser.json());
+
+// enable all CORS requests
+app.use(cors());
+
+// log HTTP requests
+app.use(morgan('combined'));
+
+// start the server
+app.listen(8081, () =&gt; {
+	console.log('listening on port 8081');
+});
+
+app.post('/webhook', (req,res) =&gt; {
+	let vt = req.headers['validation-token'];
+	if(vt) { 
+		res.set('Validation-Token', vt);
+		res.end();
+	}
+	console.log(JSON.stringify(req.body,null,'\t'));  
+	res.send('ok');
+});
+</code></pre>
+<p>The part you care about is at the end. You can see the validation support and then after that I simply dump the incoming data to the terminal. It's a pretty big object, but it's nicely documented here: <a href="https://developers.ringcentral.com/api-reference/Voicemail-Message-Event">https://developers.ringcentral.com/api-reference/Voicemail-Message-Event</a> That's for Voicemails, but in the navigation you can see they define all the different event types.</p>
+<p>I ran this and then used ngrok to create an externally facing proxy to my laptop. I've blogged about <a href="https://ngrok.com/">ngrok</a> before and if you haven't checked it out, definitely do so. It's incredibly helpful for cases like this.</p>
+<p>Now for the script I used to create the webhook. Here's the script I used:</p>
+<pre><code class="language-js">const SDK = require('@ringcentral/sdk').SDK
+
+RECIPIENT = '3374128987'
+
+RINGCENTRAL_CLIENTID = 'secret'
+RINGCENTRAL_CLIENTSECRET = 'secret'
+RINGCENTRAL_SERVER = 'https://platform.devtest.ringcentral.com'
+
+RINGCENTRAL_USERNAME = 'so secret'
+RINGCENTRAL_PASSWORD = 'super secret'
+RINGCENTRAL_EXTENSION = '101'
+
+var rcsdk = new SDK({
+    server: RINGCENTRAL_SERVER,
+    clientId: RINGCENTRAL_CLIENTID,
+    clientSecret: RINGCENTRAL_CLIENTSECRET
+});
+var platform = rcsdk.platform();
+
+(async function() {
+
+	await platform.login({
+		username: RINGCENTRAL_USERNAME,
+		password: RINGCENTRAL_PASSWORD,
+		extension: RINGCENTRAL_EXTENSION
+	});
+
+	let response = await rcsdk.send({
+		method:'POST',
+		url:'/restapi/v1.0/subscription', 
+		body:{
+			eventFilters:[
+				'/restapi/v1.0/account/~/extension/~/voicemail'
+			],
+			deliveryMode: {
+				'transportType':'WebHook',
+				'address':'http://c45955bf.ngrok.io/webhook'
+			}
+		}
+
+	});
+
+	console.log(await response.json());	
+	
+})();
+</code></pre>
+<p>The important bits are the call to the subscription endpoint. You can see me specifying my filter for voicemail and the URL I got via ngrok. As I said above, I now know I can specify expiresIn in my call (here's the <a href="https://developers.ringcentral.com/api-reference/Subscriptions/createSubscription">full API doc</a> for creating subscriptions) so I'd modify the above to specify the max value,  630720000.</p>
+<p>Ok, after all of that... it worked. I called the number RingCentral has assigned my user, left a voice mail, and saw my webhook get called in about five to ten seconds! I hope this helps. As I said, I found this to be very difficult to get working, but honestly it probably only took me an hour or so and now that I've got it working, I think I could do it again easily enough. Let me know if any of this doesn't make sense!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@chunlea?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Chunlea Ju</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

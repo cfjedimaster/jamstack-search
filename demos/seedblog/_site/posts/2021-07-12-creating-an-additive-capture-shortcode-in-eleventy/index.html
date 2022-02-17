@@ -1,0 +1,104 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Creating an Additive Capture Shortcode in Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Creating an Additive Capture Shortcode in Eleventy</h2>
+<p>
+Written: 7/12/2021
+</p>
+
+
+<p><strong>Edit on August 19, 2021: I found an issue with my code where a shortcode for 'foo' on page 1 would be shared with the same name on other pages. I corrected it by using the current page scope. Fixes are inline.</strong></p>
+<p>Ok, so let me start off by saying that a) I'm not sure this is a good idea and b) it may already exist and I just don't know about it. This all came about from me doing some research on an <a href="https://stackoverflow.com/questions/tagged/eleventy">Eleventy tagged question</a> on StackOverflow. If you aren't aware, Liquid has a tag built in called capture. It looks like so:</p>
+<pre><code class="language-html">
+{% capture my_variable %}
+I am being captured.
+{% endcapture %}
+
+</code></pre>
+<p>This then lets you output <code>my_variable</code>. Having paired shortcodes like this makes it easier to capture dynamic output and save it to a variable. So for example:</p>
+<pre><code class="language-html">
+{% capture my_variable %}
+I am being captured at {{ &quot;now&quot; | date: &quot;%Y-%m-%d %H:%M&quot; }}.
+{% endcapture %}
+
+</code></pre>
+<p>One interesting aspect of the capture shortcode though is that it always sets the value to what you capture. If you had something in that variable already, it gets overwritten. I think that's expected and not bad, but here's an example of that as well:</p>
+<pre><code class="language-html">{% capture my_variable %}I am being captured.{% endcapture %}
+{% capture my_variable %}MORE captured.{% endcapture %}
+</code></pre>
+<p>If you output <code>my_variable</code>, you will only get <code>MORE captured.</code> Again, I think this is expeted. But it got me thinking - what if we built a shortcode that appended, rather then replaced, content? This is what I came up with:</p>
+<pre><code class="language-js">module.exports = function(eleventyConfig) {
+
+	let _CAPTURES;
+	eleventyConfig.on('beforeBuild', () =&gt; {
+		//I need this to wipe _CAPTURES when editing pages, wouldn't be an issue in prod
+    	_CAPTURES = {};
+	});
+	
+	eleventyConfig.addPairedShortcode(&quot;mycapture&quot;, function (content, name) {
+		if(!_CAPTURES[this.page.inputPath]) _CAPTURES[this.page.inputPath] = {};
+		if(!_CAPTURES[this.page.inputPath][name]) _CAPTURES[this.page.inputPath][name] = '';
+		_CAPTURES[this.page.inputPath][name] += content;
+		return '';
+	});
+
+	eleventyConfig.addShortcode(&quot;displaycapture&quot;, function(name) {
+		if(_CAPTURES[this.page.inputPath] &amp;&amp; _CAPTURES[this.page.inputPath][name]) return _CAPTURES[this.page.inputPath][name];
+		return '';
+	});
+
+};
+</code></pre>
+<p>This <code>.eleventy.js</code> file defines two shortcodes - <code>mycapture</code> and <code>displaycapture</code>. I define a global variable (I'll explain <code>beforeBuild</code> in a sec) named <code>_CAPTURES</code> that stores key value pairs. In order to keep a key, <code>foo</code>, local to one page, I use the current page's <code>inputPath</code> value. (This is something I edited after the initial blog post.)  When using <code>mycapture</code>, the text inside the shortcode get passed to the <code>content</code> variable and when I actually write the shortcode, I include the <code>name</code> argument. Here's an example:</p>
+<pre><code class="language-html">{% mycapture &quot;foo&quot; %}
+&lt;p&gt;
+This is test i think 1
+&lt;/p&gt;
+{% endmycapture %}
+
+{% mycapture &quot;foo&quot; %}
+&lt;p&gt;
+This is test i think 2 
+&lt;/p&gt;
+{% endmycapture %}
+
+</code></pre>
+<p>Here I've captured <code>&quot;foo&quot;</code> twice. And then to output it, I do:</p>
+<pre><code class="language-html">&lt;p&gt;
+And here is my demo, should show two parts:
+    {% displaycapture &quot;foo&quot; %}
+&lt;/p&gt;
+
+</code></pre>
+<p>And that's it. Using the sample above you get:</p>
+<pre><code class="language-html">&lt;p&gt;
+This is test i think 1
+&lt;/p&gt;
+&lt;p&gt;
+This is test i think 2
+&lt;/p&gt;
+</code></pre>
+<p>So one thing weird I noticed is that the content began to duplicate itself. So instead of two paragraphs, I'd had four. From what I could gather, Eleventy was not rerunning <code>.eleventy.js</code> on me editing a page, so it didn't clear the variable. I initially had:</p>
+<pre><code class="language-js">const _CAPTURES = {};
+</code></pre>
+<p>I kept getting inconsistent results that would go away if I killed the Eleventy CLI and ran from scratch. I finally figured out what happened and that's when I added the <code>beforeBuild</code> event. In theory it's not needed in production as you aren't refrefshing there, but it doesn't hurt being there as is I think.</p>
+<p>If you want a copy of this, you can find it here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/additive">https://github.com/cfjedimaster/eleventy-demos/tree/master/additive</a></p>
+<p>Photo by <a href="https://unsplash.com/@jakobowens1?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Jakob Owens</a> on <a href="https://unsplash.com/s/photos/capture?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

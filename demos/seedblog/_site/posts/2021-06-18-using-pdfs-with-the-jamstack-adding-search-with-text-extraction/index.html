@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using PDFs with the Jamstack - Adding Search with Text Extraction</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using PDFs with the Jamstack - Adding Search with Text Extraction</h2>
+<p>
+Written: 6/18/2021
+</p>
+
+
+<p>A few weeks ago I shared a couple of blog posts describing how to add PDFs to your Jamstack site. The <a href="https://www.raymondcamden.com/2021/02/25/using-pdfs-with-the-jamstack">first</a> talked about the using the Adobe <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">PDF Embed API</a> to give you more control over viewing PDFs in an Eleventy site. The <a href="https://www.raymondcamden.com/2021/03/16/using-pdfs-with-the-jamstack-now-with-thumbnails">second</a> example took it a bit further by using Adobe's <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-services.html">PDF Services</a> API to generate thumbnails of the PDFs when the Eleventy site was generated. Since I wrote those posts, we (oh, I did tell you I work for Adobe, right?) released a new service, the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-extract.html">PDF Extraction API</a>.</p>
+<p>This API extracts information from your PDF, including:</p>
+<ul>
+<li>Text, of course, but deep information about the text, things like it's font, it's position, and so forth.</li>
+<li>Tables as Excel, CSV, or plain images</li>
+<li>Images</li>
+</ul>
+<p>There's a huge amount of detail available in the output, but that's of interest to me is the text itself. If our Jamstack site is making use of PDFs, it would be helpful to provide a way for users to search for text contained inside those PDFs. Let's look at an update to the last demo that adds this feature.</p>
+<p>First, I worked on the data file I use to get PDF information for the site in general. This file (I'll link to the repo at the end) is found in <code>_data\pdfs.js</code>. In the last <a href="https://www.raymondcamden.com/2021/03/16/using-pdfs-with-the-jamstack-now-with-thumbnails">post</a> the code did two things - find the PDFs and add them to an array and generate a thumbnail for each one (if it didn't exist). My first modification is going to be getting and saving the text content of the PDF. As with the thumbnails, we only do this one time.</p>
+<pre><code class="language-js">let textFile = pdf.replace('.pdf', '.txt');
+let text = '';
+if(!fs.existsSync(textFile)) {
+	console.log('need to generate text '+textFile);
+
+	text = await getPDFText(pdf, creds);
+	console.log(`Get text back, length is ${text.length}`);
+	fs.writeFileSync(textFile, text);
+} else text = fs.readFileSync(textFile,'utf-8');
+
+result.push({
+	path:files[i].replace('./','/'),
+	name,
+	text, 
+	thumb
+});
+</code></pre>
+<p>In the code above, <code>pdf</code> is one of the PDF file names and will be <code>something.pdf</code>. We want to cache the output so I use the same name with a different extension. The hard work is done in <code>getPDFText</code>. Our <a href="https://opensource.adobe.com/pdftools-sdk-docs/release/latest/howtos.html#extract-pdf">docs</a> go into detail about how this works, but the general flow is:</p>
+<ul>
+<li>Tell the API what you want (text, tables, images)</li>
+<li>Pass that and the PDF to the API</li>
+<li>Get a zip result back</li>
+<li>Extract the zip and do whatever</li>
+</ul>
+<p>For the most part it feels pretty simple, but the hard part will be dealing with the zip. Not really hard per se, but you need to find a good Zip library for your platform that's easy to use. I used <a href="https://www.npmjs.com/package/node-stream-zip">node-sream-zip</a> which seemed to work fine. Here's the entirety of the function:</p>
+<pre><code class="language-js">async function getPDFText(path, creds) {
+
+	return new Promise((resolve, reject) =&gt; {
+
+		const OUTPUT_ZIP = `./output${nanoid()}.zip`;
+
+		const credentials = PDFServicesSdk.Credentials.serviceAccountCredentialsBuilder()
+		.withClientId(creds.clientId)
+		.withClientSecret(creds.clientSecret)
+		.withPrivateKey(creds.privateKey)
+		.withOrganizationId(creds.organizationId)
+		.withAccountId(creds.accountId)
+		.build();
+
+		// Create an ExecutionContext using credentials
+		const executionContext = PDFServicesSdk.ExecutionContext.create(credentials);
+
+		// Build extractPDF options
+		const options = new PDFServicesSdk.ExtractPDF.options.ExtractPdfOptions.Builder()
+				.addElementsToExtract(PDFServicesSdk.ExtractPDF.options.ExtractElementType.TEXT).build()
+
+		// Create a new operation instance.
+		const extractPDFOperation = PDFServicesSdk.ExtractPDF.Operation.createNew(),
+			input = PDFServicesSdk.FileRef.createFromLocalFile(
+				path,
+				PDFServicesSdk.ExtractPDF.SupportedSourceFormat.pdf
+			);
+
+		extractPDFOperation.setInput(input);
+		extractPDFOperation.setOptions(options);
+
+		// Execute the operation
+		extractPDFOperation.execute(executionContext)
+			.then(result =&gt; result.saveAsFile(OUTPUT_ZIP))
+			.then(async () =&gt; {
+
+				let zipFile = new StreamZip.async({file: OUTPUT_ZIP });
+				let entries = await zipFile.entries();
+				let first = Object.values(entries)[0];
+				let dest = outputPath + nanoid() + '.' + first.name.split('.').pop();
+
+				await zipFile.extract(first.name, dest);
+				await zipFile.close();
+				let data = JSON.parse(fs.readFileSync(dest, 'utf-8'));
+
+				let text = data.elements.filter(e =&gt; e.Text).reduce((result, e) =&gt; {
+					return result + e.Text + '\n';
+				},'');
+
+				fs.unlinkSync(dest);
+				fs.unlinkSync(OUTPUT_ZIP);
+				resolve(text);
+
+			})
+			.catch(err =&gt; reject(err));
+
+	});
+
+}
+</code></pre>
+<p>It starts off creating a unique filename for the result zip so that multiple operations don't try to overwrite the same file. The code cleans up after itself but I figured better safe than sorry. Next is setup code for PDF Services, basically just loading the credentials. We then build an operation object, set the parameters (<code>addElementsToExtract</code>) and then execute.</p>
+<p>At the of this part we'll have a zip file with our data. In that zip is a JSON file that contains every single bit of text data possible from the call. This is a <em>huge</em> JSON file and you can grab a <a href="https://opensource.adobe.com/pdftools-sdk-docs/release/shared/extractJSONOutputSchema2.json">schema file</a> to help make sense of it. Here's one snippet of some sample output:</p>
+<pre><code class="language-json">{
+	&quot;Bounds&quot;: [
+		72,
+		603.0959930419922,
+		523.8600311279297,
+		743.4600067138672
+	],
+	&quot;Font&quot;: {
+		&quot;alt_family_name&quot;: &quot;Titlingmes New Roman PSMT&quot;,
+		&quot;embedded&quot;: true,
+		&quot;encoding&quot;: &quot;WinAnsiEncoding&quot;,
+		&quot;family_name&quot;: &quot;Titlingmes New Roman PSMT&quot;,
+		&quot;font_type&quot;: &quot;TrueType&quot;,
+		&quot;italic&quot;: false,
+		&quot;monospaced&quot;: false,
+		&quot;name&quot;: &quot;RHNYAF+TimesNewRomanPSMT&quot;,
+		&quot;subset&quot;: true,
+		&quot;weight&quot;: 400
+	},
+	&quot;HasClip&quot;: false,
+	&quot;Lang&quot;: &quot;en&quot;,
+	&quot;Page&quot;: 1,
+	&quot;Path&quot;: &quot;//Document/P[4]&quot;,
+	&quot;Text&quot;: &quot;Performing architecture-level trade studies and mission concept point design studies was a major effort, presenting a number of challenges to the study centers, NASA HQ and the NRC PSDS team.  As a result of this work, many lessons were learned along the way that can benefit future efforts that require similar design team study support.  The PSDS Lessons Learned task was undertaken to identify those lessons learned and make them available for future similar efforts. The approach taken was to send questionnaires to the full range of study participants, including the PSDS science champions and panels, study center leads and team participants (JPL, GSFC, APL, GRC and MSFC), and NASA HQ POCs. The set of responses reflects a complete cross-section of study participants and provides excellent insight into the PSDS mission study process. This report documents the lessons learned. &quot;,
+	&quot;TextSize&quot;: 12,
+	&quot;attributes&quot;: {
+		&quot;LineHeight&quot;: 13.75,
+		&quot;SpaceAfter&quot;: 18
+	}
+},
+</code></pre>
+<p>To me, the important part is just <code>Text</code>, and I use that in my <code>filter</code> and <code>reduce</code> calls to generate one blob of text.</p>
+<p>The end result of all this is an array of PDF data that includes where the PDF is (I use this so I can render it with the Embed API), a path to the thumbnail (used in the home page for links), and the text content.</p>
+<p>Alright, so at this point, I can build a search engine. I've covered various types of Jamstack friendly search engines here before, but the simplest one would be <a href="https://lunrjs.com/">Lunr</a>. The quick and dirty solution for building the search engine would be to expose my PDF data for indexing by Lunr and then adding a page that uses JavaScript and the Lunr library to search it. First, here is my index:</p>
+<pre><code>---
+permalink: /searchdata.json
+---
+
+[
+{% for pdf in pdfs %}
+	{
+		&quot;name&quot;: {{pdf.name | jsonify}},
+		&quot;url&quot;:&quot;/pdf/{{ pdf.name }}&quot;,
+		&quot;text&quot;:{{ pdf.text | jsonify }}
+
+	}{% unless forloop.last %},{% endunless %}
+{% endfor %}
+]
+</code></pre>
+<p>The <code>jsonify</code> filter is one I wrote myself and may be found in <code>.eleventy.js</code>:</p>
+<pre><code class="language-js">eleventyConfig.addFilter('jsonify', function (variable) {
+	return JSON.stringify(variable);
+});
+</code></pre>
+<p>I forgot to use an arrow function for that I feel so un-hipster. Sorry. The end result of this is a JSON file containing each PDF, it's url, and the text. In case your spidey-sense is tingling, yes, this could end up being a very large JSON file. I discussed how to use Lunr in a serverless fashion earlier this month: <a href="https://www.raymondcamden.com/2021/06/06/using-lunr-with-eleventy-via-netlify-serverless-functions-part-two">Using Lunr with Eleventy via Netlify Serverless Functions - Part Two</a> Just keep that in mind as a possible alteration to what I've done here. Now for the front end:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+&lt;h2&gt;Search&lt;/h2&gt;
+
+&lt;p&gt;
+&lt;input type=&quot;search&quot; id=&quot;term&quot; placeholder=&quot;Enter your search here...&quot;&gt;
+&lt;button id=&quot;searchBtn&quot;&gt;Search&lt;/button&gt;
+&lt;/p&gt;
+
+&lt;div id=&quot;result&quot;&gt;&lt;/div&gt;
+
+&lt;script src=&quot;https://unpkg.com/lunr/lunr.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+document.addEventListener('DOMContentLoaded', init, false);
+
+let idx, $term, pdfs, $result;
+
+async function init() {
+	console.log('load original data');
+	let dataRequest = await fetch('/searchdata.json');
+	pdfs = await dataRequest.json();
+
+	idx = lunr(function () {
+		this.ref('id');
+		this.field('name');
+		this.field('text');
+		pdfs.forEach(function (doc, idx) {
+			doc.id = idx;
+			this.add(doc); 
+		}, this);
+	});
+	console.log('Search index created');
+
+	document.querySelector('#searchBtn').addEventListener('click', search, false);
+	$term = document.querySelector('#term');
+	$result = document.querySelector('#result');
+
+}
+
+function search() {
+	if($term.value === '') return;
+	console.log(`search for ${$term.value}`);
+	let results = idx.search($term.value);
+	results.forEach(r =&gt; {
+		r.name = pdfs[r.ref].name;
+		r.url = pdfs[r.ref].url;
+	});
+
+	if(results.length &gt; 0) {
+		let result = '&lt;p&gt;Search results:&lt;/p&gt;&lt;ul&gt;';
+		results.forEach(r =&gt; {
+			result += `&lt;li&gt;&lt;a href=&quot;${r.url}?term=${encodeURIComponent($term.value)}&quot;&gt;${r.name}&lt;/a&gt;&lt;/li&gt;`
+		});
+		result += '&lt;/ul&gt;';
+		$result.innerHTML = result;
+	} else {
+		$result.innerHTML = '&lt;p&gt;Sorry, but there we no results.&lt;/p&gt;';
+	}
+}
+&lt;/script&gt;
+</code></pre>
+<p>I'm just using some vanilla JS here to load in the data, pass it to Lunr, and set up the form field and button to handle doing the search. If you want to give this a spin, head over to <a href="https://pdftest3.vercel.app/">https://pdftest3.vercel.app/</a> and click the Search link on top. A good search term is &quot;launch&quot;. To make it even fancier (I'll all about the fancy), I made it such that when you go through to the embedded view, I pass along the search term and use the Embed API to highlight it:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/06/pdfsearch.jpg" alt="PDF Search term highlighting example" class="lazyload imgborder imgcenter">
+</p>
+<p>You can find the complete source code for this demo here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest3">https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest3</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

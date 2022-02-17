@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Check out Begin</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Check out Begin</h2>
+<p>
+Written: 8/6/2021
+</p>
+
+
+<p>In general, when I learn something new I like to share it here on my blog, and typically I wait till I have something of a decent handle on the topic. I have to be honest here and say that that isn't quite the case here. I'm still <em>very</em> early on my exploration of <a href="https://begin.com/">Begin</a> and I wanted to share some initial thoughts.</p>
+<p>So what is Begin? While you can (and should) check out the <a href="https://begin.com/">home page</a>, I'd like to give you my impression of it. Begin is a serverless platform that reminds me a bit of <a href="https://expressjs.com/">Express</a>. Back when I first learning Node, it was Express that really &quot;clicked&quot; for me mentally. It made the act of building a web application with Node much simpler by handling boilerplace code and letting me focus on what I was actually building.</p>
+<p>Begin feels like it took Express and made it even simpler, completely removing the need for a core JavaScript file handling routes and crap and instead using convention for much of the same things.</p>
+<p>I realize that's a bit vague so let me try to describe a real world example (taken from their <a href="https://docs.begin.com/en/guides/quickstart">quick start</a>). A simple Begin application can consist of:</p>
+<ul>
+<li>A public folder that acts just like a static Express folder. Just put your CSS, images, etc in there.</li>
+<li>A src folder for server-side code. So you need to hit a remote API with a private key, manipulate the results, and return data? Just write a quick serverless function.</li>
+</ul>
+<p>And... that's it. So in Express, I'd have one app.js file, I'd set up the static directory, I'd set up the route for my function. With Begin, I don't worry about any of that.</p>
+<p>Here's a real example of how this could look. First, in <code>public/index.html</code>, I could do:</p>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+&lt;div id=&quot;foo&quot;&gt;&lt;/div&gt;
+
+&lt;script src=&quot;index.js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>And then in <code>public/index.js</code>, some simple code to update the div:</p>
+<pre><code class="language-js">document.addEventListener('DOMContentLoaded', init, false);
+async function init() {
+	let resp = await fetch('/foodata');
+	let data = await resp.json();
+	document.querySelector('#foo').innerHTML = data;
+}
+</code></pre>
+<p>To set up my serverless function, I'd define the path in my <code>package.json</code>. Look at the <code>arc</code> section:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;begin-app&quot;,
+  &quot;version&quot;: &quot;0.0.0&quot;,
+  &quot;description&quot;: &quot;A simple Begin app with the minimum necessary file structure&quot;,
+  &quot;scripts&quot;: {
+    &quot;start&quot;: &quot;npx sandbox&quot;
+  },
+  &quot;devDependencies&quot;: {
+    &quot;@architect/sandbox&quot;: &quot;^3.3&quot;
+  },
+  &quot;arc&quot;: {
+    &quot;app&quot;: &quot;begin-app&quot;,
+    &quot;http&quot;: [
+      [
+        &quot;get&quot;,
+        &quot;/foodata&quot;
+      ]
+    ]
+  },
+  &quot;dependencies&quot;: {
+    &quot;@architect/functions&quot;: &quot;^4.0.0&quot;
+  }
+}
+</code></pre>
+<p>And then - by convention - I'd make the following file: <code>src/http/get-foodata</code>:</p>
+<pre><code class="language-js">exports.handler = async function http(req) {
+
+  return {
+    headers: {
+      'content-type': 'text/html; charset=utf8',
+      'cache-control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0'
+    },
+    statusCode: 200,
+    body: 'something here'
+  }
+}
+
+</code></pre>
+<p>Locally I can run <code>npm run start</code> and start testing right away.</p>
+<p>Ok, so how is this better than Netlify or Vercel? To be honest I'm not 100% sure it is. But you do get more fine grained control over setting up your routing. So for example, if you want to expose <code>POST /addcat</code> and <em>only</em> expose it that way, you can. In Netlify I'd have to write code in my function to check the request method and block non-POST code.</p>
+<p>Like Netlify, you can deploy <a href="https://learn.begin.com/basic/frontend/ssg">static sites generators</a> like Eleventy and <a href="https://learn.begin.com/basic/frontend/spa">single page applications</a> like Vue.js. (Here's a <a href="https://docs.begin.com/en/guides/vue">guide</a> specific to Vue.) And with both you can then add your serverless code to support the application.</p>
+<p>So at this point, you may not be convinced yet to give Begin a try. As I said, it feels like a simpler, easier to use version of Express, with more power to configure your applications behavior. But Begin has two really killer features that I think are incredibly useful.</p>
+<p>First is built in support for <a href="https://docs.begin.com/en/scheduled-functions/provisioning">scheduled functions</a>. In a Node application I'd add this via a CRON library and it wouldn't be <em>too</em> hard to do, but Begin makes it trivial. Netlify and Vercel (as far as I know) don't support this at all. You would need to use a third party service to schedule calls to serverless functions.</p>
+<p>The other really cool part is <a href="https://docs.begin.com/en/data/begin-data/">Begin Data</a>, which gives you easy access key-value database system. This is <em>super</em> useful for cases where you want a database and don't necessarily want to work with another system, like Fauna. To be clear, I like Fauna, and you can absolutely use it or any other database system via your functions, but having a built-in solution is hella useful.</p>
+<p>Ok... so that's the good. There are some pretty rough aspects as well. (Before I continue, just note that everything I'm about to complain about I've shared directly with the folks at Begin as well.) The docs now are a bit hard to follow. The <a href="https://docs.begin.com/en/guides/quickstart">quickstart</a> is good, but I quickly got confused after that.</p>
+<p>Next, Begin is built on (or with?) an open source project called <a href="https://arc.codes/docs/en/guides/get-started/why-architect">Architect</a>. I would find references in the Begin docs to things from Architect that just didn't make sense to me. The Begin docs feel like they fail to handle the case of a new developer coming in with zero knowledge of that part of the project. Keep in mind that as a developer relations person, I'm always looking at projects with an eye to what <em>other</em> developers will think, what they will struggle with, and so on, and I think that Begin needs to work real hard on the post-Quickstart experience and more clearly directing folks on when they need to look at Architect.</p>
+<p>On the flip side of that, I had <em>stellar</em> support from their <a href="https://join.slack.com/t/architecture-as-text/shared_invite/MjE2MzU4Nzg0NTY1LTE1MDA2NzgyMzYtODE2NzRkOGRmYw">Slack</a> channel. After getting support there I was able to play around a lot more and get things working. One more quick tip - your free Begin account only supports five apps. That feels a bit low, but if you want to look at more examples without provisioning and taking up one of those slots, you can find all of their demo projects here: <a href="https://github.com/begin-examples">https://github.com/begin-examples</a>.</p>
+<p>So I hope this was helpful. As I said, I'm very new to this, but I'm finding it really interesting and will keep digging. I've got an application I'm working on now that makes use of our PDF Services and when it's done, I'll share that. If you've worked with Begin and have something running in production (even if just for fun), I'd love to hear about it.</p>
+<p>Photo by <a href="https://unsplash.com/@dsmacinnes?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Danielle MacInnes</a> on <a href="https://unsplash.com/s/photos/begin?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

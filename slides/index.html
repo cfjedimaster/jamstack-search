@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>Searcn and the Jamstack</title>
+
+		<link rel="stylesheet" href="dist/reset.css">
+		<link rel="stylesheet" href="dist/reveal.css">
+		<link rel="stylesheet" href="dist/theme/black.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+		<style>
+		.twocol {
+			display: grid;
+			grid-template-columns: 66% 33%;
+		}
+		</style>
+
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+
+				<section data-background="img/search.jpg">
+					<h1 style="background-color: rgba(0,0,0, 0.6)">Search and the Jamstack</h1>
+				</section>
+
+				<section>
+				<div class="twocol">
+				<div>
+				<h2>read.me</h2>
+				<ul>
+				<li>Raymond Camden</li>
+				<li>Senior Developer Evangelist for Adobe</li>
+				<li>raymondcamden.com</li>
+				<li>@raymondcamden (DMs are open!)</li>
+				</ul>
+				</div>
+				<div>
+				<img src="img/ray.jpg" style="max-width:80%">
+				</div>
+				</div>
+				</section>
+
+				<section>
+				<h2>Game Plan</h2>
+				<ul>
+				<li class="fragment">Demo the "base" site</li>
+				<li class="fragment">Discuss three search options</li>
+				<li class="fragment">Demos/Slides available at: <a href="https://github.com/cfjedimaster/jamstack-search" target="_new">github.com/cfjedimaster/jamstack-search</a></li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Base Site</h2>
+				<ul>
+				<li class="fragment">Blog (100ish articles)</li>
+				<li class="fragment">Built in Eleventy</li>
+				</ul>
+				<aside class="notes">
+				I'm using Eleventy but nothing I'm demoing couldn't be done in any other Jamstack solution.
+				</aside>
+				</section>
+
+			</div>
+		</div>
+
+		<script src="dist/reveal.js"></script>
+		<script src="plugin/notes/notes.js"></script>
+		<script src="plugin/markdown/markdown.js"></script>
+		<script src="plugin/highlight/highlight.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+				slideNumber:"c/t",
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+			});
+		</script>
+	</body>
+</html>

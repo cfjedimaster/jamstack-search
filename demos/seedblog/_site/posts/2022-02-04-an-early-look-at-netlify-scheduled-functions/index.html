@@ -1,0 +1,125 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>An Early Look at Netlify Scheduled Functions</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>An Early Look at Netlify Scheduled Functions</h2>
+<p>
+Written: 2/4/2022
+</p>
+
+
+<p>Earlier this week Netlify <a href="https://www.netlify.com/blog/quirrel-joins-netlify-and-scheduled-functions-launches-in-beta">announced</a> their acquisition of Quirrel and (more importantly to me), the beta release of scheduled functions. As the name implies, this is the ability to write Netlify serverless functions that run on a particular schedule. It's currently <a href="https://github.com/netlify/labs/blob/main/features/scheduled-functions/documentation/README.md">documented</a> over on their Labs repository, and it's certainly possible it will change before it's official release, I thought I'd build a quick example of this to see how it worked.</p>
+<p>I began by creating a new web site. Here it is. All of it.</p>
+<pre><code class="language-html">&lt;h1&gt;Hello World&lt;/h1&gt;
+</code></pre>
+<p>But check out that Lighthouse score...</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/ns1.jpg" alt="100 Lighthouse score like a G6" class="lazyload imgborder imgcenter">
+</p>
+<p>I then went ahead and created a GitHub repository, added my code to it, and made a new Netlify site that tied to it. Back in my command line, I used the CLI to generate a new function (<code>ntl functions:create rebuild</code>), and copied the code from the <a href="https://github.com/netlify/labs/blob/main/features/scheduled-functions/documentation/README.md">docs</a>.</p>
+<pre><code class="language-js">const { schedule } = require('@netlify/functions');
+
+const handler = async function(event, context) {
+    console.log(&quot;Received event:&quot;, event);
+
+    return {
+        statusCode: 200,
+    };
+};
+
+module.exports.handler = schedule(&quot;@hourly&quot;, handler);
+</code></pre>
+<p>I started my site (<code>ntl dev</code>), and then used the CLI to hit the function (<code>ntl functions:invoke rebuild</code>) and took a look at the event object. (One thing Netlify has not done a great job of is fully documenting the event structure passed to various Netlify functions tied to events.) Here's how it looked:</p>
+<pre><code class="language-js"> {
+  path: '/.netlify/functions/rebuild',
+  httpMethod: 'POST',
+  queryStringParameters: {},
+  multiValueQueryStringParameters: {},
+  headers: {
+    'x-forwarded-for': '::ffff:127.0.0.1',
+    host: 'localhost:8888',
+    connection: 'close',
+    'accept-encoding': 'gzip,deflate',
+    'content-length': '2',
+    accept: '*/*',
+    'content-type': 'text/plain;charset=UTF-8',
+    'user-agent': 'Netlify Clockwork',
+    'client-ip': '127.0.0.1',
+    'X-NF-Event': 'schedule'
+  },
+  multiValueHeaders: {
+    'x-forwarded-for': [ '::ffff:127.0.0.1' ],
+    host: [ 'localhost:8888' ],
+    connection: [ 'close' ],
+    'accept-encoding': [ 'gzip,deflate' ],
+    'content-length': [ '2' ],
+    accept: [ '*/*' ],
+    'content-type': [ 'text/plain;charset=UTF-8' ],
+    'user-agent': [ 'Netlify Clockwork' ],
+    'client-ip': [ '127.0.0.1' ]
+  },
+  body: '{&quot;next_run&quot;:&quot;2022-02-05T00:00:00.000Z&quot;}',
+  isBase64Encoded: false,
+  rawUrl: 'http://localhost:8888/.netlify/functions/rebuild',
+  rawQuery: ''
+}
+</code></pre>
+<p>Most of this probably isn't useful (although I like that user-agent), but the body is really helpful. If we grab the body and parse it...</p>
+<pre><code class="language-js">let body = JSON.parse(event.body);
+console.log(body);
+</code></pre>
+<p>We can more clearly see what it's showing:</p>
+<pre><code class="language-js">{ next_run: '2022-02-04T20:00:00.000Z' }
+</code></pre>
+<p>Nice! Your function knows when it will run again. I can see that being useful.</p>
+<p>So - one of the first things I immediately thought of was using this feature as a way to schedule rebuilds. This is actually listed in the announcement blog about one of the possible use cases.</p>
+<p>To enable this,  you need to go into your &quot;Build hooks&quot; section of your site's &quot;Build &amp; deploy&quot; settings. There you can add a new hook:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/ns2.jpg" alt="Form to add a new build hook" class="lazyload imgborder imgcenter">
+</p>
+<p>Once you add it, you get a secret URL:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/ns3.jpg" alt="Build hook with part of the URL obscured..." class="lazyload imgborder imgcenter">
+</p>
+<p>In order to trigger a build, you need to make a POST request. So I modified my scheduled function like so:</p>
+<pre><code class="language-js">const { schedule } = require('@netlify/functions');
+const fetch = require('node-fetch');
+
+const REBUILD_URL = process.env.rebuildurl;
+
+const handler = async function(event, context) {
+
+    await fetch(REBUILD_URL, { method: 'POST'});
+
+    return {
+        statusCode: 200,
+    };
+};
+
+module.exports.handler = schedule(&quot;@daily&quot;, handler);
+</code></pre>
+<p>First, note that I'm getting my rebuild URL via an environment variable. I simply copied the URL from the build hooks section and added it as a new environment setting.</p>
+<p>Next, I do my POST.</p>
+<p>And that's it. I also changed my schedule to <code>@daily</code> so it rebuilds once a day. I tested again via the CLI (<code>ntl functions:invoke rebuild</code>) and had the &quot;Deploys&quot; part of my Netlify site up. I could see it firing!</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/ns4.jpg" alt="Success build of the site based on the scheduled task." class="lazyload imgborder imgcenter">
+</p>
+<p>And that's it. I'm <em>really</em> happy with how easy Netlify made this, especially with them supporting the &quot;simpler&quot; shortcut aliases for CRON. There isn't anything more to the code than what I've shown here, but you can peruse the repo if you would like: <a href="https://github.com/cfjedimaster/netlify_scheduled_functions_test">https://github.com/cfjedimaster/netlify_scheduled_functions_test</a>. I'd also love to know how you plan on using this, so reach out with your ideas!</p>
+<p>Photo by <a href="https://unsplash.com/@sonjalangford?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Sonja Langford</a> on <a href="https://unsplash.com/s/photos/schedule?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Implementing Google Custom Search Engine's JSON API in the JAMStack</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Implementing Google Custom Search Engine's JSON API in the JAMStack</h2>
+<p>
+Written: 3/21/2020
+</p>
+
+
+<p>I've been a fan of Google's <a href="https://cse.google.com">Custom Search Engine</a> support for quite some time now. I use it <a href="/search">here</a> to handle adding search to my site. In all the time I've used CSE though, I've only used it via the &quot;embed&quot; option (again, as you see on my site), but Google also supports a <a href="https://developers.google.com/custom-search/v1/overview">JSON API</a> which gives you more fine grained control over displaying search results. I recently had to build a demo for someone using ColdFusion, so I thought I'd take a stab at demonstrating how to do with with serverless functions and the JAMStack.</p>
+<p>Before I begin, some high level things to know. In general, the API is relatively simple to use. You get an API key, you get your search engine ID, and then you make a HTTP request. Google provides you with 100 requests per day which is probably fine for most folks. As I said, in general it works just fine, but there's some details you should note.</p>
+<p>First, each search request will return the total number of results. That allows for pagination. But you are not allowed to ask for more than 100 results. So if a search for &quot;foo&quot; returned 250 results, you can only show the first ten &quot;pages&quot; of results. That's not too bad, I can't see most users clicking through over ten pages of results, but you want to ensure your code handles this correctly.</p>
+<p>Secondly, in some testing I saw the total number of results fluctuate while paging. So I'd search for &quot;foo&quot; and see X results. I'd go to the next page and still see X. But then on page 4, all of a sudden the total number changed. If I then went to page 5, the total went back to X again.</p>
+<p>Thirdly, also related to paging, the total number of results you can return in one request is ten. That seems odd to me, but I guess Google really wants to ensure you use those 100 requests. Again, probably not a big deal to most folks, but it's something you want to keep in mind.</p>
+<p>A basic request looks like so: <code>https://www.googleapis.com/customsearch/v1?key=KEY&amp;cx=CX&amp;q=TERM</code></p>
+<p>Everything there should be relatively obvious except for <code>cx</code> which is your search engine ID. If you go to the CSE portal, select one of your CSEs, you can see it here:</p>
+<img class="lazyload" src="https://static.raymondcamden.com/images/2020/03/cse1a.png" alt="Image from CSE Portal" class="imgborder imgcenter">
+<p>The other variable you would use is <code>start</code> which controls pagination. This number cannot go over 91.</p>
+<p>There are many more parameters you can use that are covered in the <a href="https://developers.google.com/custom-search/v1/cse/list#request">reference guide</a>.</p>
+<p>Alright, so let's consider a simple example of this using Netlify functions. I began by building the serverless function. I set up both my API key and CX value as environment variables.</p>
+<pre><code class="language-js">/* eslint-disable */
+const fetch = require('node-fetch');
+
+const apiKey = process.env.CSE_KEY;
+const cx = process.env.CSE_CX;
+
+exports.handler = async function(event, context) {
+  let query = event.queryStringParameters.query;
+  if(!query) {
+    return {
+      statusCode: 500,
+      body:'Must pass query parameter in the query string.'
+    }
+  }
+
+  let start = event.queryStringParameters.start || 1;
+  if(start &lt;= 0 || start &gt; 91) start = 1;
+
+  let url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&amp;cx=${cx}&amp;q=${encodeURIComponent(query)}&amp;start=${start}`;
+  let resp = await fetch(url);
+  let data = await resp.json();
+  // reduce the result a bit for simplification
+  let result = {};
+  result.info = data.searchInformation;
+  result.info.totalResults = parseInt(result.info.totalResults, 10);
+  result.items = data.items.map(d =&gt; {
+    delete d.kind;
+    if(d.pagemap &amp;&amp; d.pagemap.cse_thumbnail) {
+      d.thumbnail = { 
+        src: d.pagemap.cse_thumbnail[0].src, 
+        width: d.pagemap.cse_thumbnail[0].width, 
+        height: d.pagemap.cse_thumbnail[0].height
+      } 
+    }
+    delete d.pagemap;
+    delete d.cacheId;
+    return d
+  });
+
+  return {
+    statusCode: 200,
+    headers : {
+      'Content-Type':'application/json'
+    },
+    body: JSON.stringify(result)
+  }
+
+}
+</code></pre>
+<p>I begin with a bit of validation on the query string parameters passed to the function. <code>query</code> must be passed. <code>start</code> is optional and defaults to 1. I do a bit of basic validation on it to ensure it doesn't go below 0 or over 91.</p>
+<p>I then do a HTTP request. The <a href="https://developers.google.com/custom-search/v1/cse/list#response_1">response</a> contains a lot of information, not all that I need, so to simplify things a bit I transform the response before returning it. I focus on two elements, <code>searchInformation</code> and <code>items</code>. <code>searchInformation</code> is exactly that, information about the search. Oddly, <code>totalResults</code> is a string so I fix that on the server side. For my items, I remove things that I consider to not be important. You may feel differently and if so, just remove that <code>map</code> call. The end result is a JSON packet that looks like this (I removed most of the items to keep the size down):</p>
+<pre><code class="language-js">{
+  &quot;info&quot;: {
+    &quot;searchTime&quot;: 0.203461,
+    &quot;formattedSearchTime&quot;: &quot;0.20&quot;,
+    &quot;totalResults&quot;: &quot;507&quot;,
+    &quot;formattedTotalResults&quot;: &quot;507&quot;
+  },
+  &quot;items&quot;: [
+    {
+      &quot;title&quot;: &quot;Testing Camera Quality Settings and PhoneGap/Cordova&quot;,
+      &quot;htmlTitle&quot;: &quot;&lt;b&gt;Testing&lt;/b&gt; Camera Quality Settings and &lt;b&gt;PhoneGap&lt;/b&gt;/Cordova&quot;,
+      &quot;link&quot;: &quot;https://www.raymondcamden.com/2015/04/27/testing-camera-quality-settings-and-phonegapcordova&quot;,
+      &quot;displayLink&quot;: &quot;www.raymondcamden.com&quot;,
+      &quot;snippet&quot;: &quot;Testing Camera Quality Settings and PhoneGap/Cordova. by Raymond Camden \non April 27, 2015 | 4 Comments. As you know, when using the Camera plugin ...&quot;,
+      &quot;htmlSnippet&quot;: &quot;&lt;b&gt;Testing&lt;/b&gt; Camera Quality Settings and &lt;b&gt;PhoneGap&lt;/b&gt;/Cordova. by Raymond Camden &lt;br&gt;\non April 27, 2015 | 4 Comments. As you know, when using the Camera plugin&amp;nbsp;...&quot;,
+      &quot;formattedUrl&quot;: &quot;https://www.raymondcamden.com/.../testing-camera-quality-settings-and- phonegapcordova&quot;,
+      &quot;htmlFormattedUrl&quot;: &quot;https://www.raymondcamden.com/.../&lt;b&gt;testing&lt;/b&gt;-camera-quality-settings-and- &lt;b&gt;phonegap&lt;/b&gt;cordova&quot;
+    },
+    {
+      &quot;title&quot;: &quot;Using Ripple for PhoneGap Development&quot;,
+      &quot;htmlTitle&quot;: &quot;Using Ripple for &lt;b&gt;PhoneGap&lt;/b&gt; Development&quot;,
+      &quot;link&quot;: &quot;https://www.raymondcamden.com/2013/02/06/Using-Ripple-for-PhoneGap-Development&quot;,
+      &quot;displayLink&quot;: &quot;www.raymondcamden.com&quot;,
+      &quot;snippet&quot;: &quot;Feb 6, 2013 ... As a test, you can simply point to an HTML file on your local server and then click \nthe Ripple icon. Click to enable Ripple and the page is reloaded ...&quot;,
+      &quot;htmlSnippet&quot;: &quot;Feb 6, 2013 &lt;b&gt;...&lt;/b&gt; As a &lt;b&gt;test&lt;/b&gt;, you can simply point to an HTML file on your local server and then click &lt;br&gt;\nthe Ripple icon. Click to enable Ripple and the page is reloaded&amp;nbsp;...&quot;,
+      &quot;formattedUrl&quot;: &quot;https://www.raymondcamden.com/.../Using-Ripple-for-PhoneGap- Development&quot;,
+      &quot;htmlFormattedUrl&quot;: &quot;https://www.raymondcamden.com/.../Using-Ripple-for-&lt;b&gt;PhoneGap&lt;/b&gt;- Development&quot;,
+      &quot;thumbnail&quot;: {
+        &quot;src&quot;: &quot;https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcQpl4a1d40RU7E28NnLmbDVXB4pk_aPj6-7gdOf3DCsNIq2UevXu8fTyBvV&quot;,
+        &quot;width&quot;: &quot;251&quot;,
+        &quot;height&quot;: &quot;201&quot;
+      }
+    },
+  ]
+}
+</code></pre>
+<p>And technically - that's all I need for the back end. For the front end, I built a simple Vue.js front end. Here's the HTML portion of my form:</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+	&lt;h2&gt;Search&lt;/h2&gt;
+	&lt;p&gt;
+	&lt;input v-model=&quot;search&quot; type=&quot;search&quot;&gt; &lt;button @click=&quot;doSearch&quot; :disabled=&quot;searching&quot;&gt;Search&lt;/button&gt;
+	&lt;/p&gt;
+
+	&lt;div v-if=&quot;results&quot;&gt;
+		&lt;h3&gt;Results&lt;/h3&gt;
+		&lt;div v-for=&quot;result in results&quot;&gt;
+			&lt;p&gt;
+				&lt;span v-if=&quot;result.thumbnail&quot;&gt;
+					&lt;img :src=&quot;result.thumbnail.src&quot; :width=&quot;result.thumbnail.width&quot; :height=&quot;result.thumbnail.height&quot; class=&quot;thumbnail&quot; /&gt;
+				&lt;/span&gt;
+				&lt;a :href=&quot;result.link&quot; target=&quot;_new&quot;&gt;{{ result.title }}&lt;/a&gt;&lt;br/&gt;
+				{{ result.snippet }}
+				&lt;br clear=&quot;left&quot; /&gt;
+			&lt;/p&gt;
+		&lt;/div&gt;
+		&lt;p&gt;
+		&lt;span v-if=&quot;showPrevious&quot;&gt;&lt;button @click=&quot;doPrevious&quot;&gt;Previous Results&lt;/button&gt;&lt;/span&gt;
+		&lt;span v-if=&quot;showNext&quot;&gt;&lt;button @click=&quot;doNext&quot;&gt;Next Results&lt;/button&gt;&lt;/span&gt;
+		&lt;/p&gt;
+	&lt;/div&gt;
+
+&lt;/div&gt;
+</code></pre>
+<p>I've got a form up top and then a block to handle showing results. That block handles iterating over each result and optionally showing buttons for next and previous results. Now here's the JavaScript:</p>
+<pre><code class="language-js">const app = new Vue({
+	el:'#app',
+	data: {
+		search:'',
+		searching:false,
+		results:null,
+		start:1,
+		showPrevious: false, 
+		showNext: false
+	},
+	created() {
+		let params = new URLSearchParams(window.location.search);
+		let passedInSearch = params.get('search');
+		if(passedInSearch) {
+			this.search = passedInSearch;
+			this.doSearch();
+		}
+	},
+	methods: {
+		async doSearch() {
+			if(this.search === '') return;
+			this.searching = true;
+			this.results = null;
+			this.showPrevious = false;
+			this.showNext = false;
+			let resp = await fetch(`/.netlify/functions/search?query=${encodeURIComponent(this.search)}&amp;start=${this.start}`);
+			let data = await resp.json();
+
+			this.searching = false;
+			this.results = data.items;
+			// pagination:
+			if(this.start &gt; 10) {
+				this.showPrevious = true;
+			}
+			if(data.info.totalResults &gt; this.start + 10 &amp;&amp; (this.start + 10 &lt;= 91)) {
+				this.showNext = true;
+			}
+		},
+		doPrevious() {
+			this.start -= 10;
+			this.doSearch();
+		}, 
+		doNext() {
+			this.start += 10;
+			this.doSearch();
+		}
+	}
+});
+</code></pre>
+<p>In general this is just a simple wrapper to a back end API, but pay particular attention to the <code>created</code> block. Some sites (not mine in it's current form) support having a search box in the header, or side bar, that let a user enter text, hit a button, and then sends them to a page to display results. In order to support that in my demo, I use <code>created</code> to look at the query string and see if a value is there. If so, I use that to update my form field value for searching and immediately fire off a request.</p>
+<p>So I'd love to show this to you. It <em>is</em> live right now on a demo site. But since I've got a limit of 100 requests per day, I don't think I can safely share it. You are welcome to the <a href="https://github.com/cfjedimaster/NetlifyTestingZone">source code</a> but you'll have to trust me on how awesome it looks. Wait, don't trust me, look at this most excellent screen shot:</p>
+<img class="lazyload" src="https://static.raymondcamden.com/images/2020/03/cse2.png" alt="Screen shot" class="imgborder imgcenter">
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

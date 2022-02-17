@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Hooking Up FaunaDB to Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Hooking Up FaunaDB to Eleventy</h2>
+<p>
+Written: 9/14/2020
+</p>
+
+
+<p>As a <em>very</em> new user of <a href="https://dashboard.fauna.com/accounts/register?utm_source=DevTo&amp;utm_medium=referral&amp;utm_campaign=WritewithFauna_Hooking-upto-Eleventy_RCamden">FaunaDB</a>, I'm pretty impressed by how easy it was to setup and start using, both from the server as well as the browser. I decided to take a quick look at how FaunaDB could be integrated with my favorite static site generator, <a href="https://www.11ty.dev/">Eleventy</a>. Eleventy (aka 11ty) is one of the many options developers have for working with the Jamstack (JavaScript, APIs, and Markup) and is known both for it's speed as well as it's flexibility. I've been using Eleventy pretty exclusively now and it's easily become my preferred way to build static sites. While I won't be giving an introduction to Eleventy here, be sure to read the <a href="https://www.11ty.dev/docs/">docs</a> for more information and if you would like an introduction, check out this great one by Gift Egwuenu, <a href="https://dev.to/lauragift21/getting-started-with-eleventy-4ofg">&quot;Getting Started with Eleventy&quot;</a>.</p>
+<p>So given that a Jamstack site is static by it's very nature, how can we incorporate FaunaDB data into it? For my experiment, I began by creating a database of products.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img1.png" alt="Dashboard view of Products" class="lazyload imgborder imgcenter">
+</p>
+<p>Each product had a pretty simple structure:</p>
+<ul>
+<li>Name</li>
+<li>Price</li>
+<li>Description</li>
+<li>shippingTimeInDays</li>
+</ul>
+<p>I made a few random products using the dashboard and employed all of my creativity for the names and descriptions.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img2.png" alt="One example product" class="lazyload imgborder imgcenter">
+</p>
+<p>Alright - so I have data. Not a lot of it, but enough for a demo. How to get it into Eleventy? One of the more interesting features of Eleventy are <a href="https://www.11ty.dev/docs/data-global/">global data files</a>. These are files that provide data to the rest of the site. So for example, you could build a hard coded like of products and name it products.json:</p>
+<pre><code class="language-js">[
+	{ &quot;name&quot;: &quot;foo&quot;, &quot;price&quot;: 2.99, &quot;description&quot;: &quot;something&quot;, &quot;shippingTimeInDays&quot;:9 },
+	{ &quot;name&quot;: &quot;goo&quot;, &quot;price&quot;: 9.99, &quot;description&quot;: &quot;something else&quot;, &quot;shippingTimeInDays&quot;:8 },
+	{ &quot;name&quot;: &quot;zoo&quot;, &quot;price&quot;: 1.50, &quot;description&quot;: &quot;something more&quot;, &quot;shippingTimeInDays&quot;:10 },
+]
+</code></pre>
+<p>Once saved in a special folder (<code>_data</code>), Eleventy templates can make use of it. Another strength of Eleventy is the large amount of different template engines it supports. My personal favorite is Liquid so I'll be using that, but note that Eleventy also supports Handlebars, Jade, and more. Here's a simple Liquid template that makes use of this data:</p>
+<pre><code class="language-html">&lt;h2&gt;Our Products&lt;/h2&gt;
+
+&lt;ul&gt;
+{% for product in products %}
+&lt;li&gt;{{ product.name }} costs ${{ product.price }} and ships in {{ shippingTimeInDays }} days.&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>When Eleventy runs, it reads in the hard coded JSON file, makes it available as a <code>products</code> variable (this is because of the filename, if you had used something like <code>prods.json</code>, the variable would be <code>prods</code>), and then Liquid can loop over the product and output values.</p>
+<p>Static data can be useful, but obviously we want to be able to use our FaunaDB data. While plain JSON files work as global data in Eleventy, you can also use JavaScript files. These files will be executed when Eleventy creates a static build of your site and can perform any logic necessary, including integrating with FaunaDB! Here's an example where I fetch my data from FaunaDB:</p>
+<pre><code class="language-js">const faunadb = require('faunadb'),
+  q = faunadb.query;
+
+module.exports = async function() {
+	const client = new faunadb.Client({ secret: process.env.FAUNADB })
+
+	let productObs = await client.query(
+		q.Map(
+			q.Paginate(q.Documents(q.Collection('products'))),
+			q.Lambda(x =&gt; q.Get(x))
+		)
+	);
+	let data = productObs.data.map(po =&gt; {
+		return po.data;
+	});
+	console.log(data.length + ' products loaded from Fauna');
+	return data;
+
+}
+</code></pre>
+<p>I'm using the <code>faunadb</code> npm library and ask for my products. For each object I really only want the data so after fetching the information from FaunaDB I return an array of product values. The <code>console.log</code> message will get displayed locally while I build and helps me see that things are working.</p>
+<p>Next, I built a home page for my site that loops over the products. Here's that template:</p>
+<pre><code class="language-html">---
+layout: main
+title: Products
+---
+
+&lt;h2&gt;Products&lt;/h2&gt;
+
+&lt;ul&gt;
+{% for product in products %}
+	&lt;li&gt;&lt;a href=&quot;/product/{{product.name | slug}}&quot;&gt;{{product.name}}&lt;/a&gt;&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>The portion you see on top is front matter, a common way in Jamstack programs to set metadata for web pages. In this case I'm specifying a layout file for the page as well as a title. Layout files simply take the content of the current page and insert them inside some markup. (See the Eleventy <a href="https://www.11ty.dev/docs/layouts/">layout</a> docs for more information.)</p>
+<p>The code loops over each product and creates a link to a product detail page I'll share in a moment. This portion, <code>{{product.name | slug}}</code>, demonstrates a filter. It takes input, like &quot;Raymond Camden&quot;, and creates a filename safe version of it: &quot;raymond-camden&quot;. The end result is a set of links and names based on my data in FaunaDB:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img3.png" alt="List of products" class="lazyload imgborder imgcenter">
+</p>
+<p>Notice that the products are sorted based on how the FaunaDB code returned it. I could have sorted it there, or I could sort it in Eleventy. In my case I'm happy with the default sort. Now lets look at the product pages.</p>
+<p>Eleventy supports the ability to <a href="https://www.11ty.dev/docs/pagination/">paginate</a> data. It will take a large list of data and let you create pages of them dynamically. It also supports taking a list of data and creating <a href="https://www.11ty.dev/docs/pages-from-data/">one page each</a>. This is perfect for our needs here. This is how I defined a product template.</p>
+<pre><code class="language-html">---
+layout: main
+pagination:
+   data: products
+   size: 1
+   alias: product
+permalink: &quot;/product/{{product.name | slug}}/&quot;
+eleventyComputed:
+   title: &quot;{{product.name}}&quot;
+---
+
+&lt;h2&gt;{{ product.name }}&lt;/h2&gt;
+
+&lt;p&gt;
+{{product.description}}
+&lt;/p&gt;
+
+&lt;p&gt;
+It costs ${{product.price}} and ships in {{product.shippingTimeInDays}} days.
+&lt;/p&gt;
+
+</code></pre>
+<p>The frontmatter on top is a bit more complex here, but hopefully understandable. I've defined a pagination of 1, basically one page product. I've specified a permalink for each product (where to save the file) that matches how I linked to them from the index page. The last part, <code>eleventyComputed</code>, is a workaround for specifying custom values in front matter based on pagination. Basically it just ensures the title value is based on the current product being generated.</p>
+<p>After front matter I simply display the product. After saving this, Eleventy generates one page per product:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img4.png" alt="Product file output" class="lazyload imgborder imgcenter">
+</p>
+<p>And if we return to the index page, we can click to load one of the products:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img5.png" alt="One product page" class="lazyload imgborder imgcenter">
+</p>
+<p>And voila, we're done! (You can demo this version here: <a href="https://faunadbv1.vercel.app/">https://faunadbv1.vercel.app/</a>) But while this may make you incredibly happy, you probably realize an important issue. Eleventy will only load the products from FaunaDB when the site is built. What if your products change?</p>
+<p>Luckily we have some options. First, many Jamstack services provide a simple way to trigger builds. <a href="https://www.netlify.com/">Netlify</a>, for example, lets you expose a hidden URL that you can hit programatically to start a new build. Whatever process you use to edit your products could also fire off a request to start a new build.</p>
+<p>You could also schedule this on a periodic basis. If you know, for example, that your logistics department updates shipping times once a day, you can simply automate the rebuild to also run once a day. But let's consider another approach.</p>
+<p>FaunaDB provides both a server-side library to work with data as well as a client-side side one. We've got Eleventy loading products at build time and generating pages for each one. What if we assume some of that data is pretty static (products are probably rarely added or removed) and some is very dynamic? Let's update the site such that the <code>shippingTimeInDays</code> value is loaded on the client and is <em>always</em> up to date.</p>
+<p>To get started, I first modified my data file to copy the ID of each product:</p>
+<pre><code class="language-js">
+const faunadb = require('faunadb'),
+  q = faunadb.query;
+
+module.exports = async function() {
+	const client = new faunadb.Client({ secret: process.env.FAUNADB })
+
+	let productObs = await client.query(
+		q.Map(
+			q.Paginate(q.Documents(q.Collection('products'))),
+			q.Lambda(x =&gt; q.Get(x))
+		)
+	);
+	let data = productObs.data.map(po =&gt; {
+		let result = po.data;
+		//add the id
+		result.id = po.ref.id;
+		return result;
+	});
+	console.log(data.length + ' products loaded from Fauna');
+	return data;
+
+}
+</code></pre>
+<p>You can see me grabbing <code>ref.id</code> in the loop and assigning it the <code>id</code> property. Now let's look at the product template.</p>
+<pre><code class="language-html">---
+layout: main
+pagination:
+   data: products
+   size: 1
+   alias: product
+permalink: &quot;/product/{{product.name | slug}}/&quot;
+eleventyComputed:
+   title: &quot;{{product.name}}&quot;
+---
+
+&lt;h2&gt;{{ product.name }}&lt;/h2&gt;
+
+&lt;p&gt;
+{{product.description}}
+&lt;/p&gt;
+
+&lt;p&gt;
+It costs ${{product.price}}.
+&lt;/p&gt;
+
+&lt;p&gt;
+Availability: &lt;span id=&quot;availabilityText&quot;&gt;&lt;i&gt;Fetching...&lt;/i&gt;&lt;/span&gt;
+&lt;/p&gt;
+
+&lt;script src=&quot;//cdn.jsdelivr.net/npm/faunadb@latest/dist/faunadb-min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+const pid = '{{product.id}}';
+
+document.addEventListener('DOMContentLoaded', async () =&gt; {
+   let availabilityText = document.querySelector('#availabilityText');
+
+   console.log('product page, load '+pid);
+   let client = new faunadb.Client({ secret: 'fnAD0SNbNaACE9yDvC7hoFJRJQR35uwJZOjl2qpa' });
+   let q = faunadb.query;
+
+   let result = await client.query(
+      q.Get(q.Ref(q.Collection('products'), pid))
+   );
+   let product = result.data;
+   console.log(product);
+   availabilityText.innerHTML = `Ships in ${product.shippingTimeInDays} days.`;
+
+}, false);
+&lt;/script&gt;
+</code></pre>
+<p>I've modified the HTML to remove the hard coded availability value and replaced it with a &quot;Fetching&quot; message. This value is going to be updated via JavaScript. For simplicity sake I've put the code on the page itself. This isn't an Eleventy requirement and I could, and should, absolutely put this on it's own file. That being said, the code is rather simple. The ID value is generated when the site is built. Each product page will have a different value for <code>pid</code>. I use the FaunaDB client-side library to retrieve just the one product and once I have it, I update my HTML with the result. Note - the key I've used here is a &quot;read only&quot; key generated in the FaunaDB dashboard. As it can't modify data it's safe to use in my JavaScript.</p>
+<p>Here's an example:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/09/img6.png" alt="Static+Dynamic product info" class="lazyload imgborder imgcenter">
+</p>
+<p>Now I've got the best of both worlds. I've got a static site driven by dynamic content that will load incredibly fast but can still include up to date shipping estimates for my users. (You can demo this version here: <a href="https://faunadbv2.vercel.app/">https://faunadbv2.vercel.app/</a>)</p>
+<p>I hope this quick look at FaunaDB and Eleventy has gotten you excited about the Jamstack in general. You can learn more about the Jamstack at <a href="https://jamstack.org/">https://jamstack.org/</a>. Also, you can get the demo files for this post here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/fauna_test/">https://github.com/cfjedimaster/eleventy-demos/tree/master/fauna_test/</a></p>
+<p><span>Photo by <a href="https://unsplash.com/@worldsbetweenlines?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Patrick Hendry</a> on <a href="https://unsplash.com/s/photos/fauna?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

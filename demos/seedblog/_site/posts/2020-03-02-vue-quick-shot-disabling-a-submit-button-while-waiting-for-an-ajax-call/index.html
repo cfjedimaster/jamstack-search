@@ -1,0 +1,119 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Disabling a Submit Button While Waiting for an Ajax Call</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Disabling a Submit Button While Waiting for an Ajax Call</h2>
+<p>
+Written: 3/1/2020
+</p>
+
+
+<p>Welcome to the first of a week long series of quick <a href="https://vuejs.org/">Vue.js</a> tips. Each day (well, each week day) I'll be posting a real short, but hopefully practical, tip for Vue.js developers. For the first day we'll start with a simple tip but one that almost any application can use.</p>
+<p>It is fairly typical for an application to make use of some sort of asynchronous process. Typically this is an Ajax call. (Although not always, and to be clear, today's tip will work with anything asynchronous!) You have a form of some sort. The user hits a button. You make a network call and when that call is done, you render the result. Let's consider a simple example of this.</p>
+<p>First, a quick form.</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;form @submit.prevent=&quot;doSearch&quot;&gt;
+    &lt;input type=&quot;search&quot; v-model=&quot;term&quot; placeholder=&quot;Search&quot;&gt;
+    &lt;input type=&quot;submit&quot; value=&quot;Perform Search&quot;&gt;
+  &lt;/form&gt;
+  
+  &lt;div v-if=&quot;result&quot;&gt;
+  &lt;p&gt;
+    &lt;b&gt;The result: {{ result }}&lt;/b&gt;
+  &lt;/p&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<p>My form has one field and a button. On submit I'll run a method named <code>doSearch</code>. When I get a result, it will be displayed in a paragraph below.</p>
+<p>Now let's look at the JavaScript:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data: {
+    term:'',
+    result:''
+  },
+  methods:{
+    async doSearch() {
+     if(this.term === '') return; 
+     console.log(`search for ${this.term}`);
+     // clear previous result
+     this.result = '';
+     this.result = await searchMyAPI(this.term);
+    }
+  }
+})
+
+async function searchMyAPI(s) {
+  return new Promise((resolve, reject) =&gt; {
+    window.setTimeout(() =&gt; {
+      resolve(`something for ${s}`);
+    }, 3000);
+  });
+}
+</code></pre>
+<p>My <code>doSearch</code> method checks to see if anything was entered and if so, fires off a call to <code>searchMyAPI</code>. The details of <code>searchMyAPI</code> aren't relevant, but you can see I'm faking a slow process by making it wait for three seconds before returning the result.</p>
+<p>You can test this here:</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="OJVgqwL" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Disable submit v1">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/OJVgqwL">
+  Disable submit v1</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>When you test this, note that there's no indication that the search is actually doing anything. There's actually a few things we can do here, but today we're just going to do one - disabling the button while the search is being done.</p>
+<p>I'll begin by slightly tweaking the button:</p>
+<pre><code class="language-html">&lt;input type=&quot;submit&quot; value=&quot;Perform Search&quot; :disabled=&quot;searchDisabled&quot;&gt;
+</code></pre>
+<p>I've added a bound property, <code>disabled</code>, that points to a new value, <code>searchDisabled</code>. I then modified my JavaScript like so:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data: {
+    term:'',
+    result:'',
+    searchDisabled:false
+  },
+  methods:{
+    async doSearch() {
+     if(this.term === '') return; 
+     console.log(`search for ${this.term}`);
+     //disable the button
+     this.searchDisabled = true;
+     // clear previous result
+     this.result = '';
+     this.result = await searchMyAPI(this.term);
+     //re-enable the button
+     this.searchDisabled = false;
+    }
+  }
+})
+</code></pre>
+<p>First I added <code>searchDisabled</code>, defaulted to false. Before the search is begun I switch to false and when done, back to true. That's it! You can test this version here:</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="VwLWRgg" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Disable submit v2">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/VwLWRgg">
+  Disable submit v2</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>That's it for today's quick tip. As I said, there's one more thing you could do to this form to make it even better and I'll be covering that in tomorrow's tip!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

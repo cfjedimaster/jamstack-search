@@ -1,0 +1,136 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Adding QR Codes to Your Jamstack Site</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Adding QR Codes to Your Jamstack Site</h2>
+<p>
+Written: 2/11/2022
+</p>
+
+
+<p>QR codes have been around for some time now, but I have to admit, when I think about QR codes, I normally think of one thing:</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/Pubd-spHN-0" title="YouTube video player" frameborder="0" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="display:block;margin:auto;margin-bottom:25px"></iframe>
+<p>Honestly, I really don't think too much about them, but I've definitely noticed since COVID, I'm seeing an uptick in their usage, especially at restaurants as a way to skip handing out disease-covered menus. (Which is fine by the way, but if your going to do this, stop using a PDF as your menu.)</p>
+<p>A few days ago, <a href="https://twitter.com/danfascia">Dan Fascia</a> suggested I take a look at it, and honestly, it ended up being so darn simple I was a bit surprised.</p>
+<p>I did a quick search and came across <a href="https://www.npmjs.com/package/qrcode">node-qrcode</a>, a simple to use Node library for generating QR codes. It supports CLI usage, browser, <em>and</em> Node usage too which is nice to see. It can output the result as binary, SVG, or even to a data URL.</p>
+<p>I decided to go the data URL route as I figured it would be the simplest. I wouldn't need to figure out where to store the image and ensure it would be available in the production build.</p>
+<p>So - I began with a simple Eleventy site that displayed a list of cats.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/qr1.jpg" alt="List of cats" class="lazyload imgborder imgcenter">
+</p>
+<p>This was driven by a static JSON file:</p>
+<pre><code class="language-json">[
+
+	{
+		&quot;name&quot;:&quot;Luna&quot;,
+		&quot;gender&quot;:&quot;female&quot;,
+		&quot;age&quot;:12,
+		&quot;picture&quot;:&quot;https://placekitten.com/900/900&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Elise&quot;,
+		&quot;gender&quot;:&quot;female&quot;,
+		&quot;age&quot;:14,
+		&quot;picture&quot;:&quot;https://placekitten.com/800/800&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Pig&quot;,
+		&quot;gender&quot;:&quot;female&quot;,
+		&quot;age&quot;:9,
+		&quot;picture&quot;:&quot;https://placekitten.com/600/600&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Crackers&quot;,
+		&quot;gender&quot;:&quot;male&quot;,
+		&quot;age&quot;:5,
+		&quot;picture&quot;:&quot;https://placekitten.com/450/450&quot;
+	},
+	{
+		&quot;name&quot;:&quot;Zelda&quot;,
+		&quot;gender&quot;:&quot;female&quot;,
+		&quot;age&quot;:8,
+		&quot;picture&quot;:&quot;https://placekitten.com/700/700&quot;
+	}
+]
+</code></pre>
+<p>I then built a pagination template for my cats:</p>
+<pre><code class="language-html">---
+layout: main
+pagination:
+    data: cats
+    size: 1
+    alias: cat
+permalink: &quot;cats/{{ cat.name | slug }}/&quot;
+eleventyComputed:
+    title: &quot;{{cat.name }}&quot;
+---
+
+&lt;h2&gt;{{ cat.name }}&lt;/h2&gt;
+
+&lt;p&gt;
+&lt;img src=&quot;{{ cat.picture }}&quot; width=&quot;300&quot; height=&quot;300&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+{{ cat.name }} is {{ cat.gender }} and is {{ cat.age}} years old.
+&lt;/p&gt;
+
+{% comment %}
+page.url is just the last part, so we use a data variable for the host.
+{% endcomment %}
+{% assign url = site.host | append: page.url  | append: &quot;?fromqr=1&quot; %}
+&lt;p/&gt;
+
+&lt;p&gt;
+Scan the code below to share the link with others:&lt;br/&gt;
+&lt;img src=&quot;{{ url | qrcode }}&quot; alt=&quot;QR code for this URL.&quot;&gt;
+&lt;/p&gt;
+
+&lt;p&gt;
+&lt;a href=&quot;/&quot;&gt;Home&lt;/a&gt;
+&lt;/p&gt;
+</code></pre>
+<p>This is pretty boilerplate pagination stuff for Eleventy, but take special note of the comment. As it says, Eleventy provides a URL value for a page, but it's just the path, so for example, <code>/cats/fluffy/</code>. In order to create a &quot;full&quot; URL, I ended up making a new data file called <code>site.json</code> that simply has my host:</p>
+<pre><code class="language-json">{
+	&quot;host&quot;:&quot;https://eleventy-qrcodes.netlify.app&quot;
+}
+</code></pre>
+<p>You could probably use a JavaScript file instead and generate the host dynamically, but this was simpler and worked just fine.</p>
+<p>Back to the template, I create a <code>url</code> variable consisting of that host, the current page, and a query string value. I figure marketers will want to know when a page is loaded from a QR code so I added that to the end.</p>
+<p>I then output the image and use a shortcode, <code>qrcode</code>, to get my data. As my <code>.eleventy.js</code> is really small, I'll share the entire thing:</p>
+<pre><code class="language-js">const qrCode = require('qrcode');
+
+module.exports = function(eleventyConfig) {
+
+	eleventyConfig.addFilter(&quot;qrcode&quot;, async function(value) {
+
+		return await qrCode.toDataURL(value);
+
+	});
+
+};
+</code></pre>
+<p>Yeah, that's about as simple as you can get. Here's how the page renders:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/02/qr2.jpg" alt="Page with rendered QR code" class="lazyload imgborder imgcenter">
+</p>
+<p>You can see this for yourself here: <a href="https://eleventy-qrcodes.netlify.app/">https://eleventy-qrcodes.netlify.app/</a> I pointed my camera at one of the cat pages and the camera picked up on the code right away.</p>
+<p>As I said, this felt ridiculously easy, which is a good thing, right? You can peruse the complete code here, <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/qrcodes">https://github.com/cfjedimaster/eleventy-demos/tree/master/qrcodes</a>. Let me know what you think!</p>
+<p>Photo by <a href="https://unsplash.com/@aka_opex?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Mitya Ivanov</a> on <a href="https://unsplash.com/s/photos/qr-codes?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

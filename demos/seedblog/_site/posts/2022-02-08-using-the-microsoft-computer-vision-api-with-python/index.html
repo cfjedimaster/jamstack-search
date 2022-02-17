@@ -1,0 +1,353 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using the Microsoft Computer Vision API with Python</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using the Microsoft Computer Vision API with Python</h2>
+<p>
+Written: 2/8/2022
+</p>
+
+
+<p>A few weeks ago I blogged about using the <a href="https://www.adobe.io/document-services/apis/pdf-extract/">Adobe PDF Extract API</a> and Microsoft's Computer Vision API: <a href="https://medium.com/adobetech/integrating-ai-computer-vision-with-your-pdf-documents-fc12c9055d6c">&quot;Integrating AI Computer Vision with Your PDF Documents&quot;</a>. The idea was to extract images from a PDF and then analyze them to help provide more context about the document. While working on that article, I got to play with Microsoft's <a href="https://azure.microsoft.com/en-us/services/cognitive-services/computer-vision/#overview">image recognition API</a> again and I was impressed by how easy it was to use. As I'm learning Python, I thought it would be a good exercise to convert my JavaScript code to Python and see what results I'd get. Here's what I came up with.</p>
+<p>The first issue I ran into was needing to find a replacement for the <code>dotenv</code> npm module. This lets you put environment defaults in a <code>.env</code> file that get replaced with &quot;real&quot; values in production. Turns out there's a Python version of this, <a href="https://pypi.org/project/python-dotenv/">python-dotenv</a>.</p>
+<p>You make your <code>.env</code> file and it's then accessible in your code by doing the following:</p>
+<pre><code class="language-python">from dotenv import load_dotenv
+
+load_dotenv()
+</code></pre>
+<p>Of course, I then realized I didn't know how to read environment variables in Python. That's not hard either:</p>
+<pre><code class="language-python">import os
+
+something = os.getenv('something')
+</code></pre>
+<p>All together, it looks like so:</p>
+<pre><code class="language-python">import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MS_IMAGE_KEY = os.getenv('MS_IMAGE_KEY')
+MS_IMAGE_ENDPOINT = os.getenv('MS_IMAGE_ENDPOINT')
+</code></pre>
+<p>For the Microsoft image API two special values are needed hence the two variables above.</p>
+<p>Cool. Next, we need to hit the API. Microsoft ships a <a href="https://docs.microsoft.com/en-us/python/api/azure-cognitiveservices-vision-computervision/?view=azure-python">Python SDK</a> for the service, but I was worried that, like the Node one, it wouldn't support local images, only those loaded from URL. From what I can see the Python one <em>does</em> support local images, but as the 'just hit the API' version I built in Node was so simple, I figured I'd take the same track using the Python <code>requests</code> library. Here now is the entire script, with the important bits being the <code>scanImage</code> function:</p>
+<pre><code class="language-python">import requests
+import sys
+import os
+from dotenv import load_dotenv
+import json 
+
+load_dotenv()
+
+MS_IMAGE_KEY = os.getenv('MS_IMAGE_KEY')
+MS_IMAGE_ENDPOINT = os.getenv('MS_IMAGE_ENDPOINT')
+
+def scanImage(path):
+
+	theUrl = MS_IMAGE_ENDPOINT + 'vision/v3.2/analyze?visualFeatures=Categories,Tags,Description&amp;language=en'
+
+	headers = {
+		'Content-Type':'application/octet-stream',
+		'Ocp-Apim-Subscription-Key':MS_IMAGE_KEY
+	}
+
+	body = open(path,'rb')
+
+	response = requests.post(
+		theUrl,
+		headers = headers,
+		data = body
+	)
+
+	body.close()
+
+	return response.json()
+
+
+def main(path):
+	results = scanImage(path)
+	print(json.dumps(results, indent=4))
+
+if len(sys.argv) == 1:
+	print(&quot;Usage: scan.py &lt;image filename&gt;&quot;)
+	sys.exit()
+
+if __name__ == &quot;__main__&quot;:
+	main(sys.argv[1])
+</code></pre>
+<p>I can then test this at the command line like so:</p>
+<pre><code class="language-bash">python scan.py myimage.jpg
+</code></pre>
+<p>Using my <a href="https://www.raymondcamden.com/images/avatar.jpg">avatar in the upper left</a> as a source, here's what I get:</p>
+<pre><code class="language-js">{
+    &quot;categories&quot;: [
+        {
+            &quot;name&quot;: &quot;people_portrait&quot;,
+            &quot;score&quot;: 0.99609375,
+            &quot;detail&quot;: {
+                &quot;celebrities&quot;: []
+            }
+        }
+    ],
+    &quot;tags&quot;: [
+        {
+            &quot;name&quot;: &quot;human face&quot;,
+            &quot;confidence&quot;: 0.9980896711349487
+        },
+        {
+            &quot;name&quot;: &quot;person&quot;,
+            &quot;confidence&quot;: 0.9944546222686768
+        },
+        {
+            &quot;name&quot;: &quot;human beard&quot;,
+            &quot;confidence&quot;: 0.9923844337463379
+        },
+        {
+            &quot;name&quot;: &quot;selfie&quot;,
+            &quot;confidence&quot;: 0.9785255193710327
+        },
+        {
+            &quot;name&quot;: &quot;facial hair&quot;,
+            &quot;confidence&quot;: 0.9742406606674194
+        },
+        {
+            &quot;name&quot;: &quot;indoor&quot;,
+            &quot;confidence&quot;: 0.9726375937461853
+        },
+        {
+            &quot;name&quot;: &quot;moustache&quot;,
+            &quot;confidence&quot;: 0.9702584743499756
+        },
+        {
+            &quot;name&quot;: &quot;forehead&quot;,
+            &quot;confidence&quot;: 0.968742847442627
+        },
+        {
+            &quot;name&quot;: &quot;man&quot;,
+            &quot;confidence&quot;: 0.9670464992523193
+        },
+        {
+            &quot;name&quot;: &quot;chin&quot;,
+            &quot;confidence&quot;: 0.9610129594802856
+        },
+        {
+            &quot;name&quot;: &quot;smile&quot;,
+            &quot;confidence&quot;: 0.9607347249984741
+        },
+        {
+            &quot;name&quot;: &quot;jaw&quot;,
+            &quot;confidence&quot;: 0.9544980525970459
+        },
+        {
+            &quot;name&quot;: &quot;clothing&quot;,
+            &quot;confidence&quot;: 0.9503325819969177
+        },
+        {
+            &quot;name&quot;: &quot;eyebrow&quot;,
+            &quot;confidence&quot;: 0.9393746852874756
+        },
+        {
+            &quot;name&quot;: &quot;wall&quot;,
+            &quot;confidence&quot;: 0.9386157393455505
+        },
+        {
+            &quot;name&quot;: &quot;cheek&quot;,
+            &quot;confidence&quot;: 0.9332408905029297
+        },
+        {
+            &quot;name&quot;: &quot;eyewear&quot;,
+            &quot;confidence&quot;: 0.9194544553756714
+        },
+        {
+            &quot;name&quot;: &quot;portrait&quot;,
+            &quot;confidence&quot;: 0.8989632725715637
+        },
+        {
+            &quot;name&quot;: &quot;vision care&quot;,
+            &quot;confidence&quot;: 0.8983044624328613
+        },
+        {
+            &quot;name&quot;: &quot;skin&quot;,
+            &quot;confidence&quot;: 0.8747736215591431
+        },
+        {
+            &quot;name&quot;: &quot;cool&quot;,
+            &quot;confidence&quot;: 0.865845799446106
+        },
+        {
+            &quot;name&quot;: &quot;beard&quot;,
+            &quot;confidence&quot;: 0.8605197668075562
+        },
+        {
+            &quot;name&quot;: &quot;throat&quot;,
+            &quot;confidence&quot;: 0.8569018244743347
+        },
+        {
+            &quot;name&quot;: &quot;neck&quot;,
+            &quot;confidence&quot;: 0.8547131419181824
+        },
+        {
+            &quot;name&quot;: &quot;lip&quot;,
+            &quot;confidence&quot;: 0.8515200614929199
+        },
+        {
+            &quot;name&quot;: &quot;glasses&quot;,
+            &quot;confidence&quot;: 0.8465250730514526
+        },
+        {
+            &quot;name&quot;: &quot;wearing&quot;,
+            &quot;confidence&quot;: 0.6854460835456848
+        },
+        {
+            &quot;name&quot;: &quot;shirt&quot;,
+            &quot;confidence&quot;: 0.5346012711524963
+        }
+    ],
+    &quot;description&quot;: {
+        &quot;tags&quot;: [
+            &quot;wall&quot;,
+            &quot;person&quot;,
+            &quot;man&quot;,
+            &quot;indoor&quot;
+        ],
+        &quot;captions&quot;: [
+            {
+                &quot;text&quot;: &quot;a man with a beard and glasses&quot;,
+                &quot;confidence&quot;: 0.5318448543548584
+            }
+        ]
+    },
+    &quot;requestId&quot;: &quot;b3a07360-1a12-42f0-9c28-00fb5e255bdb&quot;,
+    &quot;metadata&quot;: {
+        &quot;height&quot;: 900,
+        &quot;width&quot;: 900,
+        &quot;format&quot;: &quot;Jpeg&quot;
+    },
+    &quot;modelVersion&quot;: &quot;2021-05-01&quot;
+}
+</code></pre>
+<p>Yep, I'm a man with beard and glasses.</p>
+<p>I then modified my script in a new file, <code>checkfor.py</code>. That's a horrible name, but basically, I wanted to have a utility that would scan an image and tell you if there was match to a term. So for example:</p>
+<pre><code class="language-bash">python checkfor.py ray.jpg beard
+</code></pre>
+<p>Would get the results and then look for the term. While it could be more complex, here's the method I built:</p>
+<pre><code class="language-python"># Given a set of results, look for str in tags or description. I return a dict with:
+# found: Boolean and optionally, &quot;where&quot; being { &quot;type&quot;:&quot;tag&quot;, &quot;tag&quot;: the tag } or
+# caption with the matched caption
+def lookFor(data, term):
+	result = { &quot;found&quot;: False }
+
+	for tag in data[&quot;tags&quot;]:
+		if tag[&quot;name&quot;] == term:
+			result[&quot;found&quot;] = True
+			result[&quot;where&quot;] = { &quot;type&quot;: &quot;tag&quot;, &quot;tag&quot;: tag }
+			return result
+
+	# Not sure about the If here
+	if data[&quot;description&quot;] and data[&quot;description&quot;][&quot;captions&quot;]:
+		for caption in data[&quot;description&quot;][&quot;captions&quot;]:
+			if caption[&quot;text&quot;].find(term) &gt;= 0:
+				result[&quot;found&quot;] = True
+				result[&quot;where&quot;] = { &quot;type&quot;: &quot;caption&quot;, &quot;caption&quot;: caption }
+
+	return result 
+</code></pre>
+<p>It will return a dictionary that signifies if a match was found, and if so, where and how. When I ran that, I got:</p>
+<pre><code class="language-js">{
+	'found': True, 
+	'where': {
+		'type': 'caption', 
+		'caption': {
+			'text': 'a man with a beard and glasses', 
+			'confidence': 0.5318448543548584
+		}
+	}
+} 
+</code></pre>
+<p>If I repeat it with a search for a cat, I (sadly) get:</p>
+<pre><code class="language-js">{'found': False}
+</code></pre>
+<p>All in all, pretty simple and direct, and as always, remember I'm learning Python, so definitely keep in mind that this could probably be done better. Here's the entire final script.</p>
+<pre><code class="language-python">import requests
+import sys
+import os
+from dotenv import load_dotenv
+import json 
+
+load_dotenv()
+
+MS_IMAGE_KEY = os.getenv('MS_IMAGE_KEY')
+MS_IMAGE_ENDPOINT = os.getenv('MS_IMAGE_ENDPOINT')
+
+def scanImage(path):
+
+	theUrl = MS_IMAGE_ENDPOINT + 'vision/v3.2/analyze?visualFeatures=Categories,Tags,Description&amp;language=en'
+
+	headers = {
+		'Content-Type':'application/octet-stream',
+		'Ocp-Apim-Subscription-Key':MS_IMAGE_KEY
+	}
+
+	body = open(path,'rb')
+
+	response = requests.post(
+		theUrl,
+		headers = headers,
+		data = body
+	)
+
+	body.close()
+
+	return response.json()
+
+# Given a set of results, look for str in tags or description. I return a dict with:
+# found: Boolean and optionally, &quot;where&quot; being { &quot;type&quot;:&quot;tag&quot;, &quot;tag&quot;: the tag } or
+# caption with the matched caption
+def lookFor(data, term):
+	result = { &quot;found&quot;: False }
+
+	for tag in data[&quot;tags&quot;]:
+		if tag[&quot;name&quot;] == term:
+			result[&quot;found&quot;] = True
+			result[&quot;where&quot;] = { &quot;type&quot;: &quot;tag&quot;, &quot;tag&quot;: tag }
+			return result
+
+	# Not sure about the If here
+	if data[&quot;description&quot;] and data[&quot;description&quot;][&quot;captions&quot;]:
+		for caption in data[&quot;description&quot;][&quot;captions&quot;]:
+			if caption[&quot;text&quot;].find(term) &gt;= 0:
+				result[&quot;found&quot;] = True
+				result[&quot;where&quot;] = { &quot;type&quot;: &quot;caption&quot;, &quot;caption&quot;: caption }
+
+	return result 
+
+def main(path,term):
+	scanresults = scanImage(path)
+	result = lookFor(scanresults, term)
+	print(result)
+
+if len(sys.argv) &lt;= 2:
+	print(&quot;Usage: checkfor.py &lt;image filename&gt; &lt;term&gt;&quot;)
+	sys.exit()
+
+if __name__ == &quot;__main__&quot;:
+	main(sys.argv[1], sys.argv[2])
+</code></pre>
+<p>Photo by <a href="https://unsplash.com/@hjrc33?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Héctor J. Rivas</a> on <a href="https://unsplash.com/s/photos/images?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

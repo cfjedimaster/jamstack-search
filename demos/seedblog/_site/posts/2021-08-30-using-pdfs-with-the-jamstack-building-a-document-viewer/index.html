@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using PDFs with the Jamstack - Building a Document Viewer</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using PDFs with the Jamstack - Building a Document Viewer</h2>
+<p>
+Written: 8/30/2021
+</p>
+
+
+<p>I've been blogging quite a bit about how to integrate Adobe's <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-services.html">PDF Services</a> with the Jamstack (<a href="https://www.11ty.dev">11ty</a> specifically but applicable to any generator) and today's I think is pretty cool. One of the features of our PDF API is the ability to <a href="https://opensource.adobe.com/pdftools-sdk-docs/release/latest/howtos.html#create-pdf">convert</a> documents into PDF. I thought it would be interesting to use that as a way to provide a consistent document viewing experience using PDF and the free <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">PDF Embed API</a>. Here's what I came up, and as always, comments and suggestions are welcome!</p>
+<h3>The Setup</h3>
+<p>My intent was to create something that would be simple to use and not require any technical knowledge of the person who owns the final site. To enable that, there's one folder (<code>documentLibrary</code>) that will contain all the files they will want visible on the site.</p>
+<p>Under this folder will be one subdirectory, <code>pdfversions</code>, which contains generated PDF versions of files. What files get converted?</p>
+<p>If you check our <a href="https://opensource.adobe.com/pdftools-sdk-docs/release/latest/howtos.html#create-pdf">docs</a>, we support the following:</p>
+<ul>
+<li>Microsoft Word (DOC, DOCX)</li>
+<li>Microsoft PowerPoint (PPT, PPTX)</li>
+<li>Microsoft Excel (XLS, XLSX)</li>
+<li>Text (TXT, RTF)</li>
+<li>Image (BMP, JPEG, GIF, TIFF, PNG)</li>
+</ul>
+<p>However it doesn't make sense to convert images to PDFs since the browser can render that just fine. (Technically it can render many of these, but we want to provide a consistent experience in our site UI.)</p>
+<p>On startup, our site will scan the document library folder and find files that <em>can</em> be converted. But it will first see if they have been previously converted and if so, will not bother.</p>
+<p>At the end, it will return Eleventy data consisting of an array of documents that we can then render out.</p>
+<h3>Part One - Setting up the Data</h3>
+<p>First, let me share how I created the data values that will be used later on in the Eleventy templates. This file (<code>_data/documents.js</code>) is pretty important. It scans the library, figures out what it needs to convert to PDF, and is responsible for outputting the result in such a way that the templates can use it later on.</p>
+<p>I went through a couple of different iterations on this, but here's the final version:</p>
+<pre><code class="language-js">const fs = require('fs').promises;
+const pdfSDK = require('@adobe/pdfservices-node-sdk');
+
+require('dotenv').config()
+
+const creds = {
+	clientId:process.env.ADOBE_CLIENT_ID,
+	clientSecret:process.env.ADOBE_CLIENT_SECRET,
+	privateKey:process.env.ADOBE_KEY,
+	organizationId:process.env.ADOBE_ORGANIZATION_ID,
+	accountId:process.env.ADOBE_ACCOUNT_ID
+}
+
+// main directory of documents
+const LIB = './documentLibrary/';
+
+// where we store PDF version of documents
+const PDFDIR = './documentLibrary/pdfversions/';
+
+// supported extensions for convertin' to PDF
+// note we aren't including images here, we'll just show em as is (nor txt)
+const SUPPORTED_EXTS = ['doc', 'docx', 'ppt', 'pptx', 'xlsx', 'txt', 'rtf'];
+const IMAGES = ['gif','jpg','jpeg','png'];
+
+module.exports = async function() {
+	console.log('running _data/documents.js');
+	let entries = await fs.readdir(LIB, { withFileTypes: true} );
+	/*
+	Our final result is an array of objects such that:
+		name, just the filename, no path
+		path points to the file
+		pdfpath points to pdf version
+		slug - filenamne minus extension
+		image - true for images (duh)
+
+		to make things simpler, for an original PDF that doesn't need 
+		converting, pdfpath == path
+	*/
+	let data = [];
+
+	let files = entries.filter(f =&gt; !f.isDirectory()).map(f =&gt; LIB + f.name);
+
+	for(let i=0; i&lt;files.length; i++) {
+
+		// remove ./ from path as we need a web safe path
+		let dataOb = {
+			path: files[i].replace('./','/'),
+			name: files[i].replace(LIB, ''), 
+			image: false
+		}
+		dataOb.slug = dataOb.name.split('.').slice(0,-1).join('.');
+
+		// is this something we can convert to pdf, if we need to
+
+		let ext = files[i].split('.').pop();
+		if(SUPPORTED_EXTS.indexOf(ext) !== -1) {
+
+			let pdfVersion = pdfFile(files[i]);
+			let pdfVersionExists = true;
+			try {
+				await fs.stat(pdfVersion);
+			} catch {
+				pdfVersionExists = false;
+			}
+			console.log('do i need to make a pdf for '+files[i]+', named '+pdfVersion+', '+pdfVersionExists);
+			if(!pdfVersionExists) {
+				await convertToPDF(files[i], pdfVersion, creds);
+			}
+
+			dataOb.pdfpath = pdfVersion.replace('./', '/');
+		} else if(ext === 'pdf') {
+			dataOb.pdfpath = dataOb.path;
+		} else if(IMAGES.indexOf(ext) !== -1) {
+			dataOb.image = true;
+		} 
+		data.push(dataOb);
+	}
+	console.log(data);
+
+	return data;
+}
+
+// utility func to go from /foo.docx to /foo/pdfdir/foo.pdf
+function pdfFile(s) {		
+	//remove path
+	s = s.replace(LIB, '');
+	let parts = s.split('.');
+	parts.pop();
+	let filename = parts.join('.');
+	let pdfVersion = PDFDIR + filename + '.pdf';
+	return pdfVersion;
+}
+
+/*
+ray, its create, not export
+*/
+
+async function convertToPDF(source,output,creds) {
+
+    return new Promise((resolve, reject) =&gt; {
+
+		const credentials = pdfSDK.Credentials.serviceAccountCredentialsBuilder()
+		.withClientId(creds.clientId)
+		.withClientSecret(creds.clientSecret)
+		.withPrivateKey(creds.privateKey)
+		.withOrganizationId(creds.organizationId)
+		.withAccountId(creds.accountId)
+		.build();
+
+		const executionContext = pdfSDK.ExecutionContext.create(credentials),
+				createPDFOperation = pdfSDK.CreatePDF.Operation.createNew();
+
+		// Set operation input from a source file
+		const input = pdfSDK.FileRef.createFromLocalFile(source);
+		createPDFOperation.setInput(input);
+
+		// Execute the operation and Save the result to the specified location.
+		createPDFOperation.execute(executionContext)
+		.then(result =&gt; result.saveAsFile(output))
+		.then(() =&gt; resolve())
+		.catch(err =&gt; {
+			if(err instanceof pdfSDK.Error.ServiceApiError
+			|| err instanceof pdfSDK.Error.ServiceUsageError) {
+				reject(err);
+			} else {
+				reject(err);
+			}
+		});
+
+	});
+
+}
+</code></pre>
+<p>I tried to document the code as much as possible, but here's how it breaks down. I begin by scanning my directory for documents. For each one, we see if we can and need to convert. If so, that process is fired off. Note that it does take time for our APIs to convert your code. In my test files (which are in the repository), it took almost two minutes, but two of the files were rather large so this isn't surprising, and it's also a one time hit. Once a PDF version exists, there's no need to create it again.</p>
+<p>I <em>really</em> went back and forth with exactly how to output the data. I ended up changing this a few times when I built my templates. I figure it's better to do more work in the data area if it helps keep the templates a bit more simple.</p>
+<p>The final bit of code, <code>convertToPDF</code>, simply wraps our documented example in a nice function that's easy to call.</p>
+<h3>Part Two - The Templates</h3>
+<p>My &quot;site&quot; is relatively simple - two templates. (There's also layout files, CSS, etc, all available in the repository.) The two templates cover the home page and then one 'view' page per document. Let's look at the home page first:</p>
+<pre><code class="language-html">---
+layout: main
+title: Document Library
+---
+
+&lt;h2&gt;Document Library&lt;/h2&gt;
+
+&lt;ul&gt;
+{% for file in documents %}
+&lt;li&gt;&lt;a href=&quot;/view/{{ file.slug | slug }}&quot;&gt;{{ file.name}}&lt;/a&gt;&lt;/li&gt;
+{% endfor %}
+
+</code></pre>
+<p>So nothing really too exciting here - a bulleted list that iterates over my document data. The only kinda weird part may be this:</p>
+<pre><code>{{ file.slug | slug }}
+</code></pre>
+<p>So I wanted to link to a URL based on the original file name, but not with the extension. So back in my data file, I took something like <code>/documentLibrary/cat.docx</code> and removed everything but the file name without the extension. With the previous example, that would be <code>cat</code>. However, I still wanted something URL safe, and given that a document could be named <code>cats are better than dogs.docx</code>, I'd use the <code>slug</code> filter to turn that into <code>cats-are-better-than-dogs</code>. I'm not happy with slug/slug there, but, it works. Here's how this renders using my lovely Boostrap layout:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/08/doclib1.jpg" alt="Bulleted list of documents" class="lazyload imgborder imgcenter">
+</p>
+<p>The template that handles documents is a bit more complex. It needs to handle using the PDF Embed... when it can... and then either rendering an image or just plain giving up (mostly). Here's that template.</p>
+<pre><code class="language-html">
+---
+layout: main
+pagination:
+  data: documents
+  size: 1
+  alias: document
+# why slug | slug? slug is the filename minus extension, but for spaces
+# and stuff, we want it replaced via the slug filter
+permalink: &quot;view/{{ document.slug | slug }}/index.html&quot; 
+---
+&lt;h2&gt;Viewing {{document.name}}&lt;/h2&gt;
+
+{% if document.pdfpath %}
+
+	&lt;div id=&quot;pdfview&quot;&gt;&lt;/div&gt;
+
+	&lt;script src=&quot;https://documentcloud.adobe.com/view-sdk/main.js&quot;&gt;&lt;/script&gt;
+	&lt;script type=&quot;text/javascript&quot;&gt;
+	const KEY = '9861538238544ff39d37c6841344b78d';
+
+	document.addEventListener(&quot;adobe_dc_view_sdk.ready&quot;, async () =&gt; {
+		let adobeDCView = new AdobeDC.View({clientId: KEY, divId: &quot;pdfview&quot;});
+		adobeDCView.previewFile(
+		{
+			content:   {location: {url: &quot;{{ document.pdfpath }}&quot;}},
+			metaData: {fileName: &quot;{{document.name}}&quot;}
+		});
+
+	});
+	&lt;/script&gt;
+
+{% elsif document.image %}
+	&lt;img src=&quot;{{document.path}}&quot; class=&quot;imagePreview&quot;&gt;
+{% else %}
+	&lt;p&gt;
+	We're unable to show a render of this document, but you can download it below.
+	&lt;/p&gt;
+{% endif %}
+
+&lt;p class=&quot;downloadBtn&quot;&gt;
+&lt;a href=&quot;{{document.path}}&quot; download class=&quot;btn btn-primary&quot; role=&quot;button&quot;&gt;Download Original File&lt;/a&gt;
+&lt;/p&gt;
+</code></pre>
+<p>Alright, so how in the heck is this working? If you remember back up in the data file, I use <code>pdfpath</code> to represent the path to either the original document, if it's a PDF, or to the converted path. This then lets me use the Embed API for any of those documents.</p>
+<p>Then we either show the image as is, or a message saying we can't render it.</p>
+<p>While the Embed API has save functionality built in, I always include a link at the bottom that lets you download the image. Thank you handly <code>download</code> attribute, I love you.</p>
+<p>Here's an example where the Embed API is rendering a PDF version of a Powerpoint:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/08/doclib2.jpg" alt="Web page with PDF embed rendering a Powerpoint presentation" class="lazyload imgborder imgcenter">
+</p>
+<p>If you would like to see the complete repository, you can check it out here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest4">https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest4</a> Enjoy and ask for help if you need it!</p>
+<p>Photo by <a href="https://unsplash.com/@iammrcup?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Mr Cup / Fabien Barral</a> on <a href="https://unsplash.com/s/photos/documents?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

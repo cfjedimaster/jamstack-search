@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Another Damn ToDo App in Vue.js</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Another Damn ToDo App in Vue.js</h2>
+<p>
+Written: 1/2/2020
+</p>
+
+
+<p>It's become somewhat of a trend these days to build ToDo apps in various languages. In fact, it's a rule that you can't release a new programming language, or framework, unless it can build a ToDo app. Seriously, I read it on the Internet.</p>
+<img src="https://static.raymondcamden.com/images/2020/01/vuetodo1.jpg" alt="It's true" class="imgborder imgcenter">
+<p>You can even find an entire website dedicated to showing you different examples of the ToDo app: <a href="http://todomvc.com/">http://todomvc.com/</a></p>
+<p>It's gotten to a point where I just really don't like seeing ToDo apps even if I recognize their appeal. The functionality is rather simple. We've all got a basic idea of what they do. Etc. That being said, I just never wanted to actually write a post like this.</p>
+<p>But during the holiday break, I was thinking about how I could use the classic ToDo app as a way to show different iterations of the same app with Vue.js. Specifically I want to write three blog posts.</p>
+<p>The first post (this one!) will demonstrate the simplest form of the app and be completely in memory, meaning that as soon as you close the browser tab the data will go away.</p>
+<p>The second post will update the code to add in Vuex and IndexedDB to persist the data. I've talked about <a href="https://www.raymondcamden.com/2019/10/16/using-indexeddb-with-vuejs">IndexedDB and Vue</a> a few times already, but I think showing the upgrade to add it's support will be useful.</p>
+<p>Finally, the third post will show storing the data using <a href="https://firebase.google.com">Firebase</a>. Firebase has been on my own &quot;todo&quot; list to learn for sometime now and I thought it would make an awesome final iteration of the project.</p>
+<p>Now I'm starting this right before heading to my first CES so there may be a bit of break between posts, but I'm sure yall are fine waiting a bit while I do my best to survive the madness in Vegas.</p>
+<p>Alright, with that out of the way, let me describe how I built the simplest version of my ToDo app in Vue.js. First let's look at the UI/UX:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/vuetodo2.jpg" alt="Initial Screen" class="imgborder imgcenter">
+<p>Initially you're presented with a header, no todos (because remember, the data doesn't persist), and a form field to add a new one. Type in some text and hit the button and you get:</p>
+<img src="https://static.raymondcamden.com/images/2020/01/vuetodo3.jpg" alt="One item added" class="imgborder imgcenter">
+<p>You can add as many as you like, each one appearing on top of the list.</p>
+<img src="https://static.raymondcamden.com/images/2020/01/vuetodo4.jpg" alt="More items added" class="imgborder imgcenter">
+<p>The button to the right of each todo lets you mark it done. There is no edit or delete. Do the damn task. When clicked, the item is crossed out, moved to the bottom, and you have the option to &quot;re-open&quot; it so to speak.</p>
+<img src="https://static.raymondcamden.com/images/2020/01/vuetodo5.jpg" alt="Items marked complete" class="imgborder imgcenter">
+<p>And that's it. So what's the code look like?</p>
+<p>I began by defining my data which consists of the array of todos and the variable that will be bound to the form field.</p>
+<pre><code class="language-js">data: {
+	todos:[],
+	todoText:''
+},
+</code></pre>
+<p>To add a new todo, I use this simple HTML. It could definitely have some validation and nicer UI.</p>
+<pre><code class="language-html">&lt;input type=&quot;text&quot; v-model=&quot;todoText&quot;&gt;
+&lt;button @click=&quot;saveToDo&quot;&gt;Save ToDo&lt;/button&gt;
+</code></pre>
+<p>This is tied to this method:</p>
+<pre><code class="language-js">saveToDo() {
+	if(this.todoText === '') return;
+	this.todos.unshift({
+		text:this.todoText,
+		done:false
+	});
+	this.todoText = '';
+},
+</code></pre>
+<p>The logic is simple. If the value in the field is blank, do nothing. Otherwise add to the front of the array an object containing a text field and done property defaulted to false. Lastly I reset the field so you could type in another one.</p>
+<p>Now let's go back to the HTML, here is how I render the ToDos and the button to mark them complete/incomplete:</p>
+<pre><code class="language-html">&lt;table&gt;
+	&lt;tr v-for=&quot;todo in sortedToDos&quot;&gt;
+		&lt;td&gt;&lt;span :class=&quot;{todoDone:todo.done}&quot;&gt;{{todo.text}}&lt;/span&gt;&lt;/td&gt;
+		&lt;td&gt;
+		&lt;button @click=&quot;toggleDone(todo)&quot;&gt;
+			&lt;span v-if=&quot;todo.done&quot;&gt;
+			Incomplete
+			&lt;/span&gt;&lt;span v-else&gt;
+			Done
+			&lt;/span&gt;
+		&lt;/button&gt;
+		&lt;/td&gt;
+	&lt;/tr&gt;
+&lt;/table&gt;
+</code></pre>
+<p>Basically I loop over <code>sortedToDos</code> (which I haven't shown you yet, don't worry, I will in a second) and do something
+different for each one based on the <code>done</code> property. In the text, I dynamically add the <code>todoDone</code> class when done is true. This adds the gray and strikethrough. In the second column, I toggle the text of the button based on the done state.</p>
+<p>The <code>toggleDone</code> method does exactly that - changes true to false or false to true:</p>
+<pre><code class="language-js">toggleDone(todo) {
+	todo.done = !todo.done;
+}
+</code></pre>
+<p>Finally, <code>sortedToDos</code> is a computed value that takes the original array and sorts them such that done items are at the end of the list.</p>
+<pre><code class="language-js">computed: {
+	sortedToDos() {
+		return this.todos.sort((a,b) =&gt; {
+			if(!a.done &amp;&amp; b.done) return -1;
+			if(a.done &amp;&amp; b.done) return 0;
+			if(a.done &amp;&amp; !b.done) return 1;
+		});
+	}
+},
+</code></pre>
+<p>You can view the entire sample and run it at the following CodePen:</p>
+<p class="codepen" data-height="400" data-theme-id="default" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="NWPwweX" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="ToDos 1">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/NWPwweX">
+  ToDos 1</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>That's it. As I said, the next version is going to kick it up a notch and add both Vuex and IndexedDB for storage.</p>
+<p>p.s. As a total aside, I've been loving the <em>hell</em> out of the <a href="https://todo.microsoft.com/tasks/">Microsoft ToDo</a> app. It's got desktop and mobile clients, built in syncing, and a lovely UI.</p>
+<p><i>Header photo by <a href="https://unsplash.com/@glenncarstenspeters?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Glenn Carstens-Peters</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

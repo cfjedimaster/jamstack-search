@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Quick Tips for Eleventy and Vercel</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Quick Tips for Eleventy and Vercel</h2>
+<p>
+Written: 3/26/2021
+</p>
+
+
+<p>I primarily use <a href="https://www.netlify.com">Netlify</a> for my Jamstack hosting service, but I also make use of <a href="https://vercel.com/">Vercel</a> quite a bit as well. Vercel's CLI is quite nice and tends to be a bit more intelligent about figuring out your site's requirements with little to no configuration. Other things, like their <a href="https://vercel.com/docs/serverless-functions/introduction">serverless functions</a>, are a bit easier to use as well. That being said, I've recently run into a small issue with Eleventy and Vercel that I thought I'd share in case others hit as well. It isn't a bug, but a combination of a few things together that may trip you up.</p>
+<p>To start, I create a two file Eleventy site. It's got a home page:</p>
+<pre><code class="language-html">
+&lt;h1&gt;Cats&lt;/h1&gt;
+
+&lt;ul&gt;
+{% for cat in cats %}
+&lt;li&gt;{{cat.name}}&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+
+</code></pre>
+<p>All I'm doing here is iterating over an array of cats. That data comes from <code>_data/cats.json</code>:</p>
+<pre><code class="language-json">[
+	{&quot;name&quot;:&quot;Luna&quot;},
+	{&quot;name&quot;:&quot;Cracker&quot;},
+	{&quot;name&quot;:&quot;Pig&quot;},
+	{&quot;name&quot;:&quot;Aleese&quot;},
+	{&quot;name&quot;:&quot;Sammy&quot;}
+]
+</code></pre>
+<p>Just to confirm it works, I ran <code>eleventy --serve</code> and hit the page in my browser.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/ve1.jpg" alt="HTML listing of cats" class="lazyload imgborder imgcenter">
+</p>
+<p>Awesome, right? Ok, so if I want to run this with Vercel and use it's local dev server, I'd probably try: <code>vercel dev</code>. However, doing so will result in this:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/ve2.jpg" alt="The CLI doesn't know the framework." class="lazyload imgborder imgcenter">
+</p>
+<p>Notice how it doesn't recognize the framework? That's because, at least for me, I use my globally installed Eleventy CLI and do not install it locally. I may be in the minority for that, but that's typically how I role. Luckily it's easy enough to fix. First I'll do an <code>npm init -f</code> to create a blank package.json. Next I'll do a <code>npm i --save @11ty/eleventy</code> to set Eleventy as a dependency. Now if I run <code>vercel dev</code>, it recognizes that I'm using Eleventy.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/ve3.jpg" alt="CLI picks up on Eleventy" class="lazyload imgborder imgcenter">
+</p>
+<p>Cool! Except when it starts, I get this:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/03/ve4.jpg" alt="Error on startup" class="lazyload imgborder imgcenter">
+</p>
+<p>It may be a bit hard to read in the screen shot, but here's some of the relevant bits:</p>
+<pre><code>
+`TemplateContentRenderError` was thrown
+&gt; Having trouble compiling template ./node_modules/liquidjs/README.md
+
+
+</code></pre>
+<p>Notice how the error is being thrown in a file in node_modules? Why?</p>
+<p>By default, Eleventy ignores the node_modules folder, which is a good thing. However, if you have a .gitignore file, this feature isn't enabled (unless it's empty). This is <a href="https://www.11ty.dev/docs/ignores/#node_modules-exemption">documented</a> of course. So what happened? The Vercel CLI creates a .gitignore file if you don't have one. It does this to tell Git to ignore the .vercel folder it creates.</p>
+<p>So now you have a .gitignore file and Eleventy won't ignore node_modules anymore. The fix, of course, is to just add it:</p>
+<pre><code>.vercel
+node_modules
+</code></pre>
+<p>This will also speed up your development server as it's ignoring the ten billion or so files under node_modules.</p>
+<p>As I said, none of this is a bug, but it's tripped me up a few times now so I thought I'd share!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

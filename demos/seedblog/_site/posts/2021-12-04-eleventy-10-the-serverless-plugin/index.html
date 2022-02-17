@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Eleventy 1.0 - The Serverless Plugin</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Eleventy 1.0 - The Serverless Plugin</h2>
+<p>
+Written: 12/4/2021
+</p>
+
+
+<p>As Eleventy moves towards a final 1.0 release, I thought I'd try to (finally) wrap my head around one of the biggest new features, the <a href="https://www.11ty.dev/docs/plugins/serverless/">Serverless plugin</a>. I say finally because this new feature has been out in beta form for a while now and I've <em>really</em> struggled with trying to wrap my head around it. This isn't to say that the feature is difficult or the docs are bad, but I just didn't get it. After multiple attempts at trying to figure out how it works, reading blog posts, and building my own demos, I <em>think</em> I've got a handle on it.</p>
+<p>As with most things I do on this blog, when I struggle with something, I try to write it down and share it with others to help them avoid the troubles I had. I'd take what follows as my &quot;initial impression&quot; of the feature and please know I may not be getting things exactly right. I welcome any feedback about the following so let me know if I've done something wrong or anything isn't quite clear.</p>
+<p>Ok, with that out of the way, let's start by describing a situation where Eleventy Serverless could help out!</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/12/readycat.jpg" alt="Cat with I'm Ready text" class="lazyload imgborder imgcenter">
+</p>
+<p>When it comes to sites that are statically generated, the typical way to add dynamic information is with client-side scripting. The page will load for the user, and sometime soon(ish), hopefully, JavaScript will figure out what it needs to figure out. This may be done entirely by itself, or JavaScript may be used to make a network request to an API.</p>
+<p>All in all this works fine typically, but there may be multiple reasons why you don't want to use client-side JavaScript. Perhaps you want to ensure that lower-end browser clients don't struggle with performance. Maybe you want to avoid the page displaying with empty blocks of content while the data is being loaded.</p>
+<p>Imagine you've built a service to report the current weather for a location. Your initial implementation was a serverless function that took in a location parameter and returned weather information:</p>
+<pre><code class="language-json">{
+	&quot;forecast&quot;:&quot;Hot, because of course it's hot in December because Louisiana is next door to the sun.&quot;
+}
+</code></pre>
+<p>This imaginary API could live at: <code>/api/weather</code>. Your front end code does something like so:</p>
+<pre><code class="language-js">let weather = await (await fetch(`/api/weather/?location=${loc}`)).json();
+document.querySelector('#forecast').innerHTML = weather.forecast
+</code></pre>
+<p>This works, but as I said above, you may decide to move to a non-client-side JavaScript solution. How would you do that?</p>
+<p>Well remember that APIs do not have to return JSON. They can, if you want, return just a plain string, including HTML. Imagine now we've changed that API to return this:</p>
+<pre><code class="language-html">&quot;&lt;p&gt;Hot, because of course it's hot in December because Louisiana is next door to the sun.&lt;/p&gt;&quot;
+</code></pre>
+<p>Cool! Now you can simply use a regular HTML link to <code>/api/weather</code> and the browser will render the HTML with no client-side coding. Except... you've now lost your site's layout! You literally only returned that paragraph of text and nothing more. You can, of course, add more HTML to the result. But then you realize, you're using Eleventy (or another generator) and it handles things like layouts, includes, etc. You don't have a simple HTML file you could copy and paste HTML from.</p>
+<p>This is where Eleventy Serverless comes in. It basically lets you create a mapping to a dynamic resource that when generated, runs Eleventy on the fly. What do I mean? Normaly Eleventy only runs when your site is built. It does all of it's magic of generating pages, incorporating your data files, pagination, and so forth. But once it's done, it's done. That's kind of the point.</p>
+<p>Eleventy serverless lets you say, &quot;Hey, on the fly I need you to run a template for me, do all my normaly stuff like layouts and so forth, but just for this request.&quot; You can also use Netlify On Demand Builders such that Eleventy will only run once for a particular request, not every time. Which you use depends on your needs.</p>
+<p>So how do you do it?</p>
+<h3>Step 1: Add the Plugin</h3>
+<p>First, what follows is mostly from <a href="https://www.11ty.dev/docs/plugins/serverless/">the docs</a>, but simplified a bit. I began by adding the Serverless plugin to my Eleventy site and giving it a name:</p>
+<pre><code class="language-js">const { EleventyServerlessBundlerPlugin } = require(&quot;@11ty/eleventy&quot;);
+
+module.exports = function(eleventyConfig) {
+
+  eleventyConfig.addPlugin(EleventyServerlessBundlerPlugin, {
+    name: &quot;serverless&quot;, 
+    functionsDir: &quot;./netlify/functions/&quot;
+  });
+
+};
+</code></pre>
+<p>There's a lot of options you can specify, but at minimum here I've given a name to my plugin based on my use case. From what I can tell, the name here does <em>not</em> need to match your intended use case, but rather the <em>type</em> of serverless response your going to use, by that I mean either responding dynamically to each request or using the On Demand run once support. The docs suggest calling it &quot;serverless&quot; if you aren't sure. Basically, even if you have two intended use cases (getting the weather and producing a picture of a cat), you only need one instance of the plugin. That <em>really</em> confused me at first. The docs use &quot;possum&quot; as an example which makes you think you should potentially name it after your use (like &quot;weather&quot;), but that's not what you need.</p>
+<h3>Step 2: Handle the Generated Files</h3>
+<p>The previous step will cause Eleventy to generate a serverless function named, well serverless. It's going to put a lot of stuff in there that you should not need to touch. The next step in the docs tells you explicitly to add this to <code>.gitignore</code>:</p>
+<pre><code>netlify/functions/serverless/**
+!netlify/functions/serverless/index.js
+</code></pre>
+<p>Basically, don't commit it to your repo, except for the index.js file, and let Eleventy manage it.</p>
+<h3>Step 3: Add a Template to Handle Requests</h3>
+<p>Now for the interesting part. We need to add a template, a regular Eleventy template, that will be a serverless template. Let's start simple:</p>
+<pre><code class="language-html">---
+layout: main
+permalink:
+    serverless: /weather/:loc
+---
+
+Test: {{ eleventy.serverless | json }}
+
+</code></pre>
+<p>In the front matter, layout will work as expected. It's going to find my template and wrap my result. The crucial bit is <code>permalink</code>. By using an object, and not a string, Eleventy maps the serverless plugin to the path <code>/weather/:loc</code>, basically <code>/weather/ANYTHING</code>. How does it do this? It does it by automatically updating <code>netlify.toml</code> for me. I can see it here:</p>
+<pre><code>[[redirects]]
+from = &quot;/weather/:loc&quot;
+to = &quot;/.netlify/functions/serverless&quot;
+status = 200
+force = true
+_generated_by_eleventy_serverless = &quot;serverless&quot;
+</code></pre>
+<p>To be clear, I didn't have to do this, the CLI handled it for me. When a request comes in for <code>/weather/something</code>, Eleventy will execute the generated serverless function which runs Eleventy just for my matching template. It provides data to the template in the <code>eleventy.serverless</code> object. This contains two things you may care about: <code>query</code> and <code>path</code>.</p>
+<p>If I go to <code>/weather/foo</code>, I see:</p>
+<pre><code>Test: {&quot;query&quot;:{},&quot;path&quot;:{&quot;loc&quot;:&quot;foo&quot;}}
+</code></pre>
+<p>If I go to <code>/weather/foo?x=1</code>, I see:</p>
+<pre><code>Test: {&quot;query&quot;:{&quot;x&quot;:&quot;1&quot;},&quot;path&quot;:{&quot;loc&quot;:&quot;foo&quot;}}
+</code></pre>
+<p>If I go to <code>/weather/</code>, I see:</p>
+<pre><code>Test: {&quot;query&quot;:{},&quot;path&quot;:{&quot;loc&quot;:&quot;index.html&quot;}}
+</code></pre>
+<p>As you can imagine, that's something I probably want to handle with an error message or some such.</p>
+<p>But again - Eleventy is handling pretty much everything for me. I can change my template and this weather page will correctly show the right UI.</p>
+<h3>Step 4: Actually Do the Dynamic Bit</h3>
+<p>So far we've added support for Eleventy Serverless by adding the plugin. We've created a template that's handled, via redirectd and serverless functions, on the fly for every request. But we haven't actually added the thing we wanted to - getting the weather.</p>
+<p>At first I thought I'd edit the serverless function created by Eleventy, but that's not what you're supposed to do. That serverless function is really just the &quot;for this request, let me run Eleventy to handle the template, layout, etc.&quot;</p>
+<p>Instead, you can either do your logic in the template itself, probably via an Eleventy filter. I created one in my <code>.eleventy.js</code> that handles the weather logic:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;getWeather&quot;, function(input) {
+	return &quot;It's hot in  &quot; + input;
+})
+</code></pre>
+<p>Normally this would call an API or do something else, and don't forget you can put complex logic in it's own files and <code>require()</code> them inside your <code>.eleventy.js</code>. I then modified my template to make use of it:</p>
+<pre><code class="language-html">---
+layout: main
+permalink:
+    serverless: /weather/:loc
+---
+
+Test: {{ eleventy.serverless | json }}
+
+&lt;p/&gt;
+
+{% if eleventy.serverless.path.loc %}
+
+	The weather for {{ eleventy.serverless.path.loc }} : {{ eleventy.serverless.path.loc | getWeather }} 
+
+{% endif %}
+
+</code></pre>
+<p>The template uses logic now to see if a path value exists (and should also do something if it doesn't). If it does, I display the path value as well as the result of passing it to the filter. As the <a href="https://www.11ty.dev/docs/plugins/serverless/">Eleventy Serverless</a> docs mention, if you're going to output user-defined input, you <em>really</em>* should escape it, but I'm keeping things relatively simple here for the demo.</p>
+<p>The final bit I did was create a home page that links to this:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+This is my test. Check out the weather for &lt;a href=&quot;/weather/foo&quot;&gt;foo&lt;/a&gt;
+and &lt;a href=&quot;/weather/goo&quot;&gt;goo&lt;/a&gt;.
+</code></pre>
+<p>You can demo this here: <a href="https://serverlesstest1.netlify.app/">https://serverlesstest1.netlify.app/</a></p>
+<h3>Recap</h3>
+<p>Let me repeat everything I said above just to summarize:</p>
+<ul>
+<li>Eleventy Serverless is a way to have dynamic pages in production</li>
+<li>It lets you reuse your site's templates, layouts, and more, in response to a specific request</li>
+<li>Eleventy will generate all the back end code for you, you handle making a template</li>
+<li>Eleventy provides query and path information to your template to make use of</li>
+</ul>
+<p>There's definitely more than I covered so read the <a href="https://www.11ty.dev/docs/plugins/serverless/">docs</a> carefully. Also see the other blog posts:</p>
+<ul>
+<li><a href="https://bryanlrobinson.com/blog/creating-a-dynamic-color-converter-with-11ty-serverless/">Creating a dynamic color converter with 11ty Serverless</a></li>
+<li><a href="https://www.algolia.com/blog/engineering/building-server-rendered-search-for-static-sites-with-11ty-serverless-netlify-and-algolia/">Building server-rendered search for static sites with 11ty Serverless, Netlify, and Algolia</a></li>
+<li><a href="https://www.smashingmagazine.com/2021/10/static-first-madlib-generator-portable-text-netlify-builder-functions/">Building A Static-First MadLib Generator With Portable Text And Netlify On-Demand Builder Functions</a></li>
+</ul>
+<p>If you want to see my code, you can find it at my repo here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/eleventyServerlessTest1">https://github.com/cfjedimaster/eleventy-demos/tree/master/eleventyServerlessTest1</a></p>
+<p>I hope to have more, and perhaps more real-world, examples of this soon.</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

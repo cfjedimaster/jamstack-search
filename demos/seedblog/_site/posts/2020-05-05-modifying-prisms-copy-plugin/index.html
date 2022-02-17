@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Modifying Prism's Copy Plugin</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Modifying Prism's Copy Plugin</h2>
+<p>
+Written: 5/4/2020
+</p>
+
+
+<p>This post definitely falls into the &quot;I'm Not Sure This is a Good Idea&quot; Department, but I thought I'd share on the wild chance it was useful to others. I've been using <a href="https://prismjs.com/index.html">Prism</a> for source code blocks for sometime now and I like it fine enough. Recently I was working on a presentation about technical documentation. While working on the slide deck, I came across a code sample that had some line breaks in it:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/spotify.png" alt="Curl example" class="lazyload imgborder imgcenter">
+</p>
+<p>In the code sample above, the curl command is broken over multiple lines. This isn't valid, but is nicely readable. Compare that to this version:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/curl.png" alt="Another curl example" class="lazyload imgborder imgcenter">
+</p>
+<p>This is also nicely readable, but did you know that Windows users can't use <code>\</code> to break commands like that? The main terminal, cmd.exe, uses <code>^</code> instead. It's a minor issue, but it's something I'm cognizant of when I write docs. Developers, right or wrong, will copy and paste things as they learn and something small like this could trip them up.</p>
+<p>Ok, so back to Prism. It turns out that it has a plugin to support <a href="https://prismjs.com/plugins/copy-to-clipboard/">copy to clipboard</a> support. When downloading, you simply select that plugin and it will be added to your code samples automatically. There's nothing else you need to do which is pretty nice. While this isn't a Prism tutorial, here's how the HTML looks:</p>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
+&lt;link rel=&quot;stylesheet&quot; href=&quot;prism.css&quot;&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+
+&lt;h2&gt;Test&lt;/h2&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;
+curl 
+	-x &quot;foo.html&quot;
+	-z &quot;doo&quot;
+	-B true
+	-D {&quot;name&quot;:&quot;ray&quot;, age: 47, &quot;code&quot;:&quot;not real&quot;}
+	&gt; output.txt
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;script src=&quot;prism.js&quot;&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Note, that is <em>not</em> meant to be a real example of a <code>curl</code> call. You can see a demo of this here: <a href="https://prismcopytest.now.sh/v1/">https://prismcopytest.now.sh/v1/</a>.</p>
+<p>Cool. So given that Prism can add a &quot;Copy&quot; command to code blocks, can we modify it such that we can show a command line example like we have above but when put in the clipboard it's all one line? Turns out you can.</p>
+<p>The first thing I did was redownload Prism <em>without</em> the Copy plugin. The <a href="https://prismjs.com/plugins/copy-to-clipboard/">docs</a> for the plugin include all the code there so I knew I could use that as a base. I did make the mistake of not including the Toolbar plugin. It's required so you need to ensure that option is checked.</p>
+<p>Next, I added the Clipboard.js CDN above my prism.js load like so:</p>
+<pre><code class="language-html">&lt;script src=&quot;https://cdn.jsdelivr.net/npm/clipboard@2/dist/clipboard.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;prism.js&quot;&gt;&lt;/script&gt;
+</code></pre>
+<p>In a second you'll see the Copy plugin code and it actually supports loading this dynamically, but it felt better to include it manually.</p>
+<p>Alright, so looking at the source of the plugin, the portion that handles getting the text to copy is this:</p>
+<pre><code class="language-js">var clip = new ClipboardJS(linkCopy, {
+	'text': function () {
+		return env.code;
+	}
+});
+</code></pre>
+<p>I surmised that <code>env.code</code> was the code block. I confirmed this by adding the plugin code to my page and just adding a console.log message above it.</p>
+<p>With that in place, I then did a quick modification:</p>
+<pre><code class="language-js">var clip = new ClipboardJS(linkCopy, {
+	'text': function () {
+		return env.code.split('\n').join(' ').replace(/\s+/g,' ');
+	}
+});
+</code></pre>
+<p>Basically, split the code along new lines, join them back together in a string, and then replace whitespace with one space. And... it just plain worked. If you go to the next version (<a href="https://prismcopytest.now.sh/v2/">https://prismcopytest.now.sh/v2/</a>) and click copy, you'll end up with this in the clipboard:</p>
+<pre><code>curl -x &quot;foo.html&quot; -z &quot;doo&quot; -B true -D {&quot;name&quot;:&quot;ray&quot;, age: 47, &quot;code&quot;:&quot;not real&quot;} &gt; output.txt 
+</code></pre>
+<p>This would (should) work in any operating system and is nicely readable on screen. You could make the argument that a user may try to type it as they see it, which would break, hence me prefixing this entire blog entry with &quot;it may not be a good idea&quot; - but it works. Anyway, what do folks think?</p>
+<p>p.s. While I think this is a good example, I typically <em>despise</em> places that mess with the clipboard. A lot of places will prefix selected text with something like, &quot;Copied from ...&quot; which I just find incredibly annoying.</p>
+<p><i>Header photo by <a href="https://unsplash.com/@evablue?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Eva Blue</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

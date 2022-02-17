@@ -1,0 +1,64 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vue Quick Shot - Fullscreen API</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Vue Quick Shot - Fullscreen API</h2>
+<p>
+Written: 9/3/2020
+</p>
+
+
+<p>After yesterday's <a href="https://www.raymondcamden.com/2020/09/03/vue-quick-shot-using-page-visibility">quick shot</a>, today's should be simpler - using the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fullscreen_API">Fullscreen API</a>. This is one of the simplest and most useful API's out there. If a browser supports it (currently at near <a href="https://caniuse.com/#feat=fullscreen">100%</a>) than all you need to enable fullscreen on your web page is the <code>requestFullscreen</code> DOM method.</p>
+<p>For example:</p>
+<pre><code class="language-js">document.querySelector('#myCat').requestFullScreen();
+</code></pre>
+<p>The <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fullscreen_API">API</a> supports more options (events and exiting fullscreen mode via code), but let's look at a simple example with Vue.js.</p>
+<p>Let's begin with our HTML. I'm going to include an image and a button to enable fullscreen access. The button will only show up if the Fullscreen API is enabled. Note the use of <code>ref</code> on the image so I can grab it easier via Vue later.</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;h2&gt;Cats&lt;/h2&gt;
+  &lt;img src=&quot;https://placekitten.com/400/200&quot; ref=&quot;catpic&quot;&gt;&lt;br/&gt;
+  &lt;button v-if=&quot;showFSButton&quot; @click=&quot;fullscreenCats&quot;&gt;Full Screen Cats&lt;/button&gt;
+&lt;/div&gt;
+</code></pre>
+<p>Now let's look at the JavaScript:</p>
+<pre><code class="language-js">const app = new Vue({
+  el:'#app',
+  data: {
+    showFSButton:false
+  },
+  created() {
+    if(document.fullscreenEnabled) this.showFSButton = true;
+  },
+  methods:{
+    fullscreenCats() {
+      this.$refs.catpic.requestFullscreen();
+    }
+  }
+})
+</code></pre>
+<p>So my data just includes the boolean for whether or not the button will show up. My <code>created</code> method checks if the feature exists and if so will set the value to true.</p>
+<p>Finally, the button's click event uses the API to open the image in fullscreen mode. And that's it! Here's a full demo in CodePen, and yes the button works in the embed.</p>
+<p class="codepen" data-height="400" data-theme-id="dark" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="oNxoQEG" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue + Fullscreen">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/oNxoQEG">
+  Vue + Fullscreen</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>As always, let me know if this helps you!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

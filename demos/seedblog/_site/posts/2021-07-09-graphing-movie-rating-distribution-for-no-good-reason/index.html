@@ -1,0 +1,222 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Graphing Movie Rating Distribution For No Good Reason</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Graphing Movie Rating Distribution For No Good Reason</h2>
+<p>
+Written: 7/9/2021
+</p>
+
+
+<p>I'm on vacation this week (one of the benefits of working for <a href="https://adobe.com">Adobe</a> are two shutdowns during the year) and haven't really had a chance to write a lick of code (been busy grinding levels in Black Ops multiplayer), but yesterday I found myself working on a small demo for no real important reason outside of just wanting to see what would happen. For folks outside of America, the MPA (formally the MPAA) is the Motion Picture Association. They're responsible for assigning ratings to movies released in America. There's a lot to be said about these ratings, and if you haven't seen it, I highly recommend <a href="https://en.wikipedia.org/wiki/This_Film_Is_Not_Yet_Rated">&quot;This Film is Not Yet Rated&quot;</a> as it details some of the hypocritical ratings giving out by the association.</p>
+<p>I found myself on the web site for the ratings system, <a href="https://www.filmratings.com/">https://www.filmratings.com/</a>, and discovered they had a search engine that let you find films for a particular year and rating. For example, here's the R movies released when I was born: <a href="https://www.filmratings.com/Search?filmYear=1973&amp;filmRating=R&amp;x=20&amp;y=18">https://www.filmratings.com/Search?filmYear=1973&amp;filmRating=R&amp;x=20&amp;y=18</a></p>
+<p>Being the kind of person I am, I opened up devtools in my browser and discovered the web site was hitting a SOAP based web service to get its data: <a href="https://www.filmratings.com/Filmratings_CARA/WebCaraSearch/Service.asmx">https://www.filmratings.com/Filmratings_CARA/WebCaraSearch/Service.asmx</a></p>
+<p>I <em>love</em> SOAP web services, and by love, I mean truly, truly hate. But I've dealt with them before (<a href="https://www.raymondcamden.com/2016/10/12/working-with-soap-in-a-node-app">&quot;Working with SOAP in a Node App&quot;</a>) and I thought it would be interesting to see how the distribution of ratings varied over the years. I noticed that the web service returned a value representing the total number of films for a year and rating along with a page of data. The total would be enough for me. By playing with the web site, I discovered that the earliest data I could get was for 1968, and with that I whipped up a script that would gather totals for ratings from 1968 to 2020.</p>
+<p>Note that the ratings themselves have changed over the years. For example, PG-13 was added in 1984. Some, like &quot;GP&quot;, were removed. &quot;X&quot; was changed to &quot;NC-17&quot;. For my script I decided to focus on the &quot;common&quot; ratings most people recognize.</p>
+<p>I began with a simple script to get one year, one rating:</p>
+<pre><code class="language-js">const soap = require('soap');
+const apiWSDL = 'https://www.filmratings.com/Filmratings_CARA/WebCaraSearch/Service.asmx?WSDL';
+const xml2js = require('xml2js');
+
+(async () =&gt; {
+
+	let year = 1968;
+	let rating = 'G';
+
+	let client = await soap.createClientAsync(apiWSDL);
+
+	let result = await client.GetTitleListByYearRatingFullWithPaginationAsync({
+		year: 1968,
+		rating: 'G'
+	});
+
+	let parser = new xml2js.Parser();
+
+	let xml = result[0]['GetTitleListByYearRatingFullWithPaginationResult'];
+	//console.log(xml);
+	let data = await parser.parseStringPromise(xml);
+	let total = data.SearchResults.total_response[0];
+	console.log(`There were ${total} ${rating} movies in ${year}`);
+
+})();
+</code></pre>
+<p>Notice I'm using <code>soap</code> and <code>xml2js</code> packages. The <code>soap</code> package handles talking to the web sevvice and <code>xml2js</code> helps me parse the final result. Remember I'm only interested in the total, not the names of the movies. With this done, I then made the script a bit more generic:</p>
+<pre><code class="language-js">const soap = require('soap');
+const apiWSDL = 'https://www.filmratings.com/Filmratings_CARA/WebCaraSearch/Service.asmx?WSDL';
+const xml2js = require('xml2js');
+const parser = new xml2js.Parser();
+let client;
+const ratings = ['G', 'PG', 'PG-13', 'R', 'NC-17','X'];
+const startYear = 1968;
+const endYear = 2020;
+const fs = require('fs');
+
+const totalResult = [];
+
+(async () =&gt; {
+
+	for(let year=startYear; year &lt;= endYear; year++) {
+		let yearResult = { year, ratings:{} };
+		for(let x=0; x &lt; ratings.length; x++) {
+			let rating = ratings[x];
+			let total = await getTotal(year, rating);
+			console.log(`There were ${total} ${rating} movies in ${year}`);
+			yearResult.ratings[rating] = parseInt(total,10);
+		}
+		totalResult.push(yearResult);
+	}
+
+	fs.writeFileSync('./mparatings.json', JSON.stringify(totalResult), 'utf8');
+	console.log('Wrote out the data.');
+
+})();
+
+async function getTotal(year, rating) {
+	if(!client) client = await soap.createClientAsync(apiWSDL);
+	let result = await client.GetTitleListByYearRatingFullWithPaginationAsync({
+		year,
+		rating
+	});
+
+	let xml = result[0]['GetTitleListByYearRatingFullWithPaginationResult'];
+	//console.log(xml);
+	let data = await parser.parseStringPromise(xml);
+	let total = data.SearchResults.total_response[0];
+	return total;
+}
+</code></pre>
+<p>Notice I write out the results to a file. My thinking was that I'd do the &quot;scrape&quot; of the data once only. I didn't want to 'abuse' the API and hit it while I played with the results. Here's a subset of how the results look:</p>
+<pre><code class="language-json">[
+	{
+		&quot;year&quot;: 1968,
+		&quot;ratings&quot;: {
+			&quot;G&quot;: 181,
+			&quot;PG&quot;: 0,
+			&quot;PG-13&quot;: 0,
+			&quot;R&quot;: 49,
+			&quot;NC-17&quot;: 0,
+			&quot;X&quot;: 3
+		}
+	},
+	{
+		&quot;year&quot;: 1969,
+		&quot;ratings&quot;: {
+			&quot;G&quot;: 175,
+			&quot;PG&quot;: 0,
+			&quot;PG-13&quot;: 0,
+			&quot;R&quot;: 77,
+			&quot;NC-17&quot;: 0,
+			&quot;X&quot;: 13
+		}
+	},
+    // more years...
+]
+</code></pre>
+<p>Cool. So at this point, I had all my data, I just needed to chart it. Since I can't seem to use the same client-side charting solution more than once in a row, I went with <a href="https://apexcharts.com/">ApexCharts</a> since it was free and came up when I searched for a stacked bar chart. I'll shate the code, but honestly I mostly just cut and pasted from their docs. Here's the HTML, which is just an empty div:</p>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
+&lt;/head&gt;
+
+
+&lt;body&gt;
+
+&lt;div id=&quot;chart&quot;&gt;&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/apexcharts&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;mpa_app.js&quot;&gt;&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>And here's the code. Most of the work is in translating the data I made into a form that ApexCharts wants.</p>
+<pre><code class="language-js">const ratings = ['G', 'PG', 'PG-13', 'R', 'NC-17','X'];
+  
+document.addEventListener('DOMContentLoaded', init, false);
+async function init() {
+
+	let req = await fetch('./mparatings.json');
+	let data = await req.json();
+
+	let allYears = data.map(d =&gt; {
+		return d.year;
+	});
+
+	let series = [];
+	data.forEach(d =&gt; {
+		for(let rating in d.ratings) {
+			let existingSeries = series.findIndex(d =&gt; {
+				return d.name === rating;
+			});
+			if(existingSeries === -1) {
+				series.push({name:rating, data:[]});
+				existingSeries = series.length-1;
+			}
+			series[existingSeries].data.push(d.ratings[rating]);
+		}
+	});
+	console.log(series);
+
+	let options = {
+		series,
+		chart: {
+			type: 'bar',
+			height: '100%',
+			stacked: true,
+		},
+		plotOptions: {
+			bar: {
+				horizontal: true
+			},
+		},
+        stroke: {
+          width: 1,
+          colors: ['#fff']
+        },
+        title: {
+          text: 'MPA Ratings by Years'
+        },
+        xaxis: {
+          categories: allYears
+        },
+        yaxis: {
+          title: {
+            text: undefined
+          },
+        },
+        fill: {
+          opacity: 1
+        },
+        legend: {
+          position: 'top',
+          horizontalAlign: 'left',
+          offsetX: 40
+        }
+	};
+
+	let chart = new ApexCharts(document.querySelector(&quot;#chart&quot;), options);
+	chart.render();
+}
+</code></pre>
+<p>And here's the result:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/07/mpa1.jpg" alt="Bar chart" class="lazyload imgborder imgcenter">
+</p>
+<p>I realize that's too small to read. I put the web app itself up here: <a href="https://static.raymondcamden.com/demos/mpa/mpa.html">https://static.raymondcamden.com/demos/mpa/mpa.html</a> If you've got any questions about this, hit me up!</p>
+<p>Photo by <a href="https://unsplash.com/@felixmooneeram?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Felix Mooneeram</a> on <a href="https://unsplash.com/s/photos/movie-theater?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

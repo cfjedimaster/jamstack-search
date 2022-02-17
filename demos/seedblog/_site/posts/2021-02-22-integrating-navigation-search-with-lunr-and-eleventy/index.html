@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Integrating Navigation Search with Lunr and Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Integrating Navigation Search with Lunr and Eleventy</h2>
+<p>
+Written: 2/21/2021
+</p>
+
+
+<p>Forgive me for what may be a slightly confusing title. I've previously talked about integrating <a href="https://lunrjs.com/">Lunr</a> and <a href="https://www.11ty.dev/">Eleventy</a> (<a href="https://www.raymondcamden.com/2019/10/20/adding-search-to-your-eleventy-static-site-with-lunr">&quot;Adding Search to your Eleventy Static Site with Lunr&quot;</a> and the more recent <a href="https://www.raymondcamden.com/2021/01/22/using-pre-built-lunr-indexes-with-eleventy">&quot;Using Pre-Built Lunr Indexes with Eleventy&quot;</a>). In both of those blog posts I had a simple home page with a search for embedded directly on it:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/el1.jpg" alt="Example of search displayed results on home page" class="lazyload imgborder imgcenter">
+</p>
+<p>For my simple demo, this was sufficient, but I wanted something that was a bit more realistic. In many sites, the navigation itself has a small form field where a user can enter a term, hit a button (or Enter), and then takes them to a search page with results. So for example, imagine this as your top navigation bar:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/el2.jpg" alt="Example of search field in header" class="lazyload imgborder imgcenter">
+</p>
+<p>The expectation is that I can enter a term there, hit the button, and on the search page, it should already be performing a query for my input. As you can probably guess, with Lunr this involves noticing the search term in the query string and automatically performing the search. Here's how I did that.</p>
+<p>First, I'm not going to go over how the site was built, I did that in my <a href="https://www.raymondcamden.com/2019/10/20/adding-search-to-your-eleventy-static-site-with-lunr">first post</a> on the topic. If you didn't read it and don't have time, the basic procedure was:</p>
+<ul>
+<li>I told Eleventy to take the data from one collection (a set of GI Joe characters) and generated a JSON version of it.</li>
+<li>My search code reads the JSON and builds a Lunr index from it.</li>
+<li>I used Vue to build a simple search interface that interacted with the index.</li>
+</ul>
+<p>I used that demo as my source and then modified it quite a bit. First, I added Bootstrap to the UI. Look how pretty it is now:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/el3.jpg" alt="Example of demo with Bootstrap applied" class="lazyload imgborder imgcenter">
+</p>
+<p>I also removed the search application from the home page and instead made a dedicated page for it (<code>search.liqud</code>):</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/el4.jpg" alt="Search page example" class="lazyload imgborder imgcenter">
+</p>
+<p>Here's how I enabled the search in the navigation to correctly default the search. First, I made sure my search form was using <code>GET</code>, this will include the term in the query string. Here's the relevant code from my layout:</p>
+<pre><code class="language-html">&lt;form class=&quot;d-flex&quot; action=&quot;/search&quot; method=&quot;get&quot;&gt;
+	&lt;input class=&quot;form-control me-2&quot; type=&quot;search&quot; placeholder=&quot;Search&quot; aria-label=&quot;Search&quot; name=&quot;q&quot;&gt;
+	&lt;button class=&quot;btn btn-outline-success&quot; type=&quot;submit&quot;&gt;Search&lt;/button&gt;
+&lt;/form&gt;
+</code></pre>
+<p>I then made a slight modification to my existing Vue code (the complete code is both in the previous blog entry and the GitHub repo I'll share at the end):</p>
+<pre><code class="language-js">async created() {
+
+	const qs = new URLSearchParams(window.location.search);
+	this.term = qs.get('q');
+
+	let result = await fetch('/index.json');
+	docs = await result.json();
+	// assign an ID so it's easier to look up later, it will be the same as index
+	this.idx = lunr(function () {
+		this.ref('id');
+		this.field('title');
+		this.field('content');
+
+		docs.forEach(function (doc, idx) {
+			doc.id = idx;
+			this.add(doc); 
+		}, this);
+	});
+	this.docs = docs;
+
+	if(this.term) this.search();
+
+},
+</code></pre>
+<p>The changes are at the beginning and end of the <code>created</code> method. I start off by looking at the query string and checking for the <code>q</code> parameter (matching the name of the form field). At the end, if I have a value, I fire off a request to search. This means you land on the page and after it loads the JSON file and makes the index it will then perform the search. Of course, you can change the search term after and perform new searches.</p>
+<p>You can demo this here: <a href="https://lunr3.vercel.app/">https://lunr3.vercel.app/</a>. Try &quot;cobra&quot; as a search term. Or simply go here: <a href="https://lunr3.vercel.app/search?q=cobra">https://lunr3.vercel.app/search?q=cobra</a> This small change lets you link people directly to searches as well.</p>
+<p>The full source may be found here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/lunr3">https://github.com/cfjedimaster/eleventy-demos/tree/master/lunr3</a></p>
+<p>For the heck of it, and since everyone isn't a Vue user, I also built a &quot;vanilla&quot; JavaScript version available at <code>/search-vanilla</code> (and <code>search-vanilla.liquid</code> on the repo above). Here's that template.</p>
+<pre><code class="language-html">---
+layout: main
+title: Search
+---
+
+&lt;h1&gt;Search&lt;/h1&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+	&lt;div class=&quot;row&quot;&gt;
+		&lt;div class=&quot;col&quot;&gt;
+			&lt;input type=&quot;search&quot; id=&quot;term&quot; class=&quot;form-control&quot;&gt; 
+		&lt;/div&gt;
+		&lt;div class=&quot;col&quot;&gt;
+			&lt;button class=&quot;btn btn-primary&quot; id=&quot;searchBtn&quot;&gt;Search&lt;/button&gt;
+		&lt;/div&gt;
+	&lt;/div&gt;
+
+	&lt;div id=&quot;results&quot; class=&quot;mt-3&quot;&gt;&lt;/div&gt;
+
+&lt;/div&gt;
+
+&lt;script&gt;
+document.addEventListener('DOMContentLoaded', init, false);
+let idx, docs;
+let field, resultsDiv;
+
+async function init() {
+
+	let result = await fetch('/index.json');
+	docs = await result.json();
+	// assign an ID so it's easier to look up later, it will be the same as index
+	idx = lunr(function () {
+		this.ref('id');
+		this.field('title');
+		this.field('content');
+
+		docs.forEach(function (doc, idx) {
+			doc.id = idx;
+			this.add(doc); 
+		}, this);
+	});
+
+	document.querySelector('#searchBtn').addEventListener('click', search);
+
+	field = document.querySelector('#term');
+
+	const qs = new URLSearchParams(window.location.search);
+	let term = qs.get('q');
+
+	resultsDiv = document.querySelector('#results');
+
+	if(term) { field.value = term; search(); }
+
+}
+
+function search() {
+	let search = field.value.trim();
+	if(!search) return;
+	console.log(`search for ${search}`);
+
+	let results = idx.search(search);
+
+	let resultsHTML = '&lt;p&gt;&lt;strong&gt;Search Results&lt;/strong&gt;&lt;/p&gt;';
+
+	if(!results.length) {
+		resultsHTML += '&lt;p&gt;Sorry, there were no results.&lt;/p&gt;';
+		resultsDiv.innerHTML = resultsHTML;
+		return;
+	}
+
+	resultsHTML += '&lt;ul&gt;';
+
+	// we need to add title, url from ref
+	results.forEach(r =&gt; {
+		let title = docs[r.ref].title;
+		let url = docs[r.ref].url;
+		resultsHTML += `&lt;li&gt;&lt;a :href=&quot;${url}&quot;&gt;${ title }&lt;/a&gt;&lt;/li&gt;`;
+
+	});
+
+	resultsHTML += '&lt;/ul&gt;';
+	resultsDiv.innerHTML = resultsHTML;
+}
+&lt;/script&gt;
+</code></pre>
+<p>It's pretty similar to the Vue version except I've got to build the HTML in JavaScript, which I don't care for but template strings make a hell of a lot better. Anyway, I hope this helps!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

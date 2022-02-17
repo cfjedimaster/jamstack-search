@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Remembering (and Restoring) a Route with Vue Router</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Remembering (and Restoring) a Route with Vue Router</h2>
+<p>
+Written: 1/11/2021
+</p>
+
+
+<p>While playing Dragon Quest X1 Sunday morning, a random idea popped in my head and it was interesting enough to convince me
+to put down the controller and take out the laptop and work on a quick demo. What idea was it? In most (well built) sites, if you request a resource that requires a login, you will be returned to that resource after successfully logging in. I was curious how I'd do that with a Vue single page application.</p>
+<p>I began by creating an incredibly simple Vue application. It consisted of these views:</p>
+<ul>
+<li>A home page.</li>
+<li>A products page with a list of static products.</li>
+<li>A detail page for each product.</li>
+<li>A users age with a list of static users.</li>
+<li>A detail page for each user.</li>
+<li>A login page with a button you can click to login.</li>
+</ul>
+<p>Nothing in the above was hitting an API so it was pretty quick to build. If you are reading this I'm assuming you're already familiar with Vue and <a href="https://router.vuejs.org/">Vue Router</a>. I'm also using <a href="https://vuex.vuejs.org/">Vuex</a> for state management.</p>
+<p>The only thing really interesting in the initial demo would be how I handle login checking and redirecting. This is from the end of my <code>router/index.js</code> file:</p>
+<pre><code class="language-js">router.beforeEach((to, from, next) =&gt; {
+  if(!store.state.loggedin &amp;&amp; !(to.name === 'Login')) {
+    next({name:'Login'});
+  } else next();
+});
+</code></pre>
+<p>Pretty straightforward. If I'm not logged in and I'm not actually loading the login page, redirect. As I said, everything is static data, so this is how the <code>login</code> routine works on <code>Login.vue</code>:</p>
+<pre><code class="language-js">login() {
+	this.$store.commit('setLogin', true);
+	this.$router.replace({name:'Home'});
+}
+</code></pre>
+<p>Basically pass on to Vuex the current login state and then go home.</p>
+<p>You can demo this yourself live here: <a href="https://v1.raymondcamden.vercel.app/">https://v1.raymondcamden.vercel.app/</a>. Click the button to login, click around a bit, and reload. Note that you will be logged out. After logging in again, you return to the home page. The source code for this initial version may be found here: <a href="https://github.com/cfjedimaster/vue-demos/tree/master/rememberroute/v1">https://github.com/cfjedimaster/vue-demos/tree/master/rememberroute/v1</a></p>
+<p>Ok, so that's V1. To support what I wanted, here's the changes I made in V2. First, in my router, I told Vuex to remember my route:</p>
+<pre><code class="language-js">router.beforeEach((to, from, next) =&gt; {
+  if(!store.state.loggedin &amp;&amp; !(to.name === 'Login')) {
+    store.commit('setLastPath', to.fullPath);
+    next({name:'Login'});
+  } else next(); 
+});
+</code></pre>
+<p>I store the value of <code>fullPath</code> as it contained <em>everything</em> possible in the URL, including the path as well as query string parameters. To test this, I modified a page to manually include one, like so:</p>
+<pre><code class="language-html">&lt;router-link to=&quot;/user/3?name=jacob&quot;&gt;Test&lt;/router-link&gt;
+</code></pre>
+<p>My next change was to my login routing. Here's how it was modified:</p>
+<pre><code class="language-js">login() {
+	this.$store.commit('setLogin', true);
+	if(this.$store.state.lastPath) {
+		let next = this.$store.state.lastPath;
+		this.$store.commit('setLastPath', '');
+		this.$router.replace(next);
+	} else {
+		this.$router.replace({name:'Home'});
+	}
+}
+</code></pre>
+<p>As before, I store my login state, but now I look to see if a <code>lastPath</code> value was stored in Vuex. In theory, it <em>always</em> should be. If so, I clear the old value and redirect there, otherwise I just go home. Again, in theory, <code>lastPath</code> should always be there, but it just felt safer using the if statement to be sure.</p>
+<p>You can demo this version here, and note I'm linking to a subpage, not the home page: <a href="https://v2.raymondcamden.vercel.app/users">https://v2.raymondcamden.vercel.app/users</a>. And you can see the full source here: <a href="https://github.com/cfjedimaster/vue-demos/tree/master/rememberroute/v2">https://github.com/cfjedimaster/vue-demos/tree/master/rememberroute/v2</a></p>
+<p>Definitely not rocket science Vue.js stuff, but I wanted to see it in action myself so I figured I'd share the results. I'd love to hear how others are doing it and if you would like, share a comment below with your implementations.</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

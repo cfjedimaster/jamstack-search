@@ -1,0 +1,209 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Building a Reddit Workflow with Pipedream</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Building a Reddit Workflow with Pipedream</h2>
+<p>
+Written: 4/19/2020
+</p>
+
+
+<p>Almost four years ago I <a href="https://www.raymondcamden.com/2016/07/05/new-poc-dailyreddit">blogged</a> about a demo I built using <a href="https://www.reddit.com/">Reddit's</a> API. The demo was a multi-user application that made use of Mongo for persistence and Passport.js for user authentication. You would login, select subreddit's to subscribe to, and then once a day it would email you the new posts from that subreddit.  This was built in a &quot;traditional&quot; Node.js style with a server running full time to process requests. I thought it would be fun to build this again (although slightly different) using <a href="https://pipedream.com">Pipedream's</a> support for working with the Reddit API. I built two different versions of a simple workflow I'd like to share below.</p>
+<p>So before I begin, how does Pipedream support Reddit? Currently Pipedream doesn't have a &quot;service explorer&quot; or a way to see what pre-built actions are available. What I've been doing is going to a test workflow I use for, well, testing, and click to add a new action. I then browse what's available. If you know what you want, you can click the name of the app to filter. Apps will be at the end of the list of actions:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit1.png" alt="Action/app display" class="lazyload imgborder imgcenter">
+</p>
+<p>After you click it, the actions are then filtered to items within it. In the case of Reddit, this is quite a bit:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit2.png" alt="List of actions" class="lazyload imgborder imgcenter">
+</p>
+<p>You can type to filter even more. For my case I knew I wanted to get new posts so typing &quot;new&quot; was enough:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit3.png" alt="New" class="lazyload imgborder imgcenter">
+</p>
+<p>Finally, once you select the action, note that the you probably still need to know about the API itself. Sometimes the properties are obvious, but sometimes they aren't. So in the example above, I knew what Subreddit meant but wasn't sure about the value of &quot;after&quot;:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit4.png" alt="Property examples" class="lazyload imgborder imgcenter">
+<p>
+<p>So in that case, I simply used the <a href="https://www.reddit.com/dev/api/">Reddit API documentation</a>.</p>
+<p>Alright, so with that out of the way, let me talk about what I built.</p>
+<h3>Reddit Demo Version One</h3>
+<p>For my first workflow, I attempted to recreate my Node POC in a simpler manner. When you add an application to your Pipedream workflow and authenticate it, it's tied to your account, so instead of trying to build something multi-user with Mongo and all that, I settled on a simpler idea.</p>
+<ul>
+<li>Get the new posts from one subreddit.</li>
+<li>Email them to me.</li>
+</ul>
+<p>My <a href="https://pipedream.com/@raymondcamden/daily-reddit-posts-p_dDCYOd/edit">workflow</a> ended up with the following steps:</p>
+<ul>
+<li>A CRON trigger set to run once a day.</li>
+<li>A Node.js trigger to specify the subreddit name:</li>
+</ul>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	this.reddit = 'Acadiana';
+})
+</code></pre>
+<ul>
+<li>Next, I used the &quot;get new&quot; Reddit action. While this supports an &quot;after&quot; filter, that relies on the ID of a post. There is no way to apply a date filter. I figured I'd fix that later. All I specified here then was the subreddit:</li>
+</ul>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit5.png" alt="Configured step" class="lazyload imgborder imgcenter">
+</p>
+<ul>
+<li>As I said above, there's no way (that I know of) to filter to today via the API. So I added a Node.js step to filter to posts no more than 24 hours old.</li>
+</ul>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	/*
+	Date.now is ms, for reddit posts, created_utc is seconds, so convert our value to seconds
+	*/
+	const now = Date.now()/1000;
+	// and 24 hours in seconds then is 24 * 60 * 60
+	const maxtime = 24 * 60 * 60;
+	this.currentPosts = steps.get_new.$return_value.data.children.filter(p =&gt; {
+		let diff = now - p.data.created_utc;
+		return diff &lt; maxtime;
+	}).map(p =&gt; {
+		return p.data;
+	});
+	console.log('i now have '+this.currentPosts.length+' posts');
+})
+</code></pre>
+<p>Let me just say I'm very proud of my <code>filter</code> and <code>map</code> usage there. Almost Google tech interview quality I'd say. ;)</p>
+<ul>
+<li>The next step handles creating my value to be used in email. I used some of the logic from my <a href="https://www.raymondcamden.com/2016/07/05/new-poc-dailyreddit">old post</a> in terms of handling things like recognizing when there's a proper thumbnail.</li>
+</ul>
+<pre><code class="language-js">async (event, steps) =&gt; {
+
+	let dotLeft = function(s, len) {
+	if(s.length &lt; len) return s;
+	return s.substring(0, len)+'...';
+	};
+
+	this.subject = `Daily Reddit Report for ${steps.constants.reddit}`;
+	this.body = `
+	&lt;h2&gt;Daily New Posts for ${steps.constants.reddit}&lt;/h2&gt;
+	&lt;p/&gt;
+	`;
+	steps.filter_to_today.currentPosts.forEach(p =&gt; {
+		// only show thumbnails when they aren't &quot;self&quot;,&quot;default&quot;,&quot;nswf&quot;
+		if(p.thumbnail === 'self' || p.thumbnail === 'default' || p.thumbnail === 'nsfw') delete p.thumbnail;
+		let text = '';
+		if(p.is_self) text = dotLeft(p.selftext,200);
+		this.body += `
+		&lt;p&gt;
+		${ p.thumbnail ? '&lt;img src=&quot;'+p.thumbnail+'&quot; align=&quot;left&quot; style=&quot;margin-right:10px&quot;&gt;':''}
+		&lt;b&gt;Title: ${p.title}&lt;/b&gt;&lt;br/&gt;
+		URL: &lt;a href=&quot;${p.url}&quot;&gt;${p.url}&lt;/a&gt;&lt;br/&gt;
+		Author: ${p.author}&lt;br/&gt;
+		&lt;br clear=&quot;left&quot;&gt;
+		${text}
+		&lt;/p&gt;  
+		`
+	});
+
+}
+</code></pre>
+<p>Be sure to make note of that epic ternary operator in there. I'm a 10X developer, 9X minimum.</p>
+<ul>
+<li>And then finally, I added the email step. By default, Pipedream's email step requires the text of an email but makes the HTML property optional. To keep things easier, I supplied my HTML value for both, which is <em>not</em> what you would want to do. Since I know I can read HTML email, I figured that was ok.</li>
+</ul>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit6.png" alt="Email step" class="lazyload imgborder imgcenter">
+</p>
+<p>And that was it. Now I've got a daily report for my favorite subreddit (it's for my local area) that shows up in my inbox once a day.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit7.png" alt="Email example" class="lazyload imgborder imgcenter">
+</p>
+<p>You can view (and copy!) the complete workflow here: <a href="https://pipedream.com/@raymondcamden/daily-reddit-posts-p_dDCYOd/edit">https://pipedream.com/@raymondcamden/daily-reddit-posts-p_dDCYOd/edit</a></p>
+<h3>Reddit Demo Version Two</h3>
+<p>The first iteration was nice, but a bit limited. For the second version I decided to kick it up a notch. I wanted a version where the email contained new posts from ally of my subscribed subreddits. Luckily Pipedream makes that part trivial as they have an action for that already. All I needed to do was put it together. But that raised a new issue. I knew I could take my first workflow and turn it into an API. Pass in a subreddit name and return the posts as JSON instead of emailing them.</p>
+<p>But Pipedream doesn't support the idea of &quot;loop over this array and execute a step for each&quot; - at least not yet. Given that I knew I'd have a workflow as an API, I decided to use two workflows. One for the API, and one to handle making HTTP requests to that endpoint and &quot;collect&quot; the results.</p>
+<p>Let's start with the API. I began with a HTTP trigger which gave me a URL to hit. I then added the same &quot;get new&quot; Reddit action and tied the subreddit name to the query string:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit8.png" alt="Reddit step" class="lazyload imgborder imgcenter">
+</p>
+<p>Note that after I had tested my URL with a query string value (<code>subreddit</code>), the editor was smart enough to suggest it when I added the step. It even (although it's not in this screen shot) showed a sample value. This was freaking cool and super helpful.</p>
+<p>My next step was the &quot;filter and return&quot; step and used this code:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+	/*
+	Date.now is ms, for reddit posts, created_utc is seconds, so convert our value to seconds
+	*/
+	const now = Date.now()/1000;
+	// and 24 hours in seconds then is 24 * 60 * 60
+	const maxtime = 24 * 60 * 60;
+	let result = steps.get_new.$return_value.data.children.filter(p =&gt; {
+	let diff = now - p.data.created_utc;
+	return diff &lt; maxtime;
+	}).map(p =&gt; {
+	return p.data;
+	});
+
+	$respond({
+		status: 200,
+		body: { result }, // This can be any string, object, or Buffer
+	});
+
+}
+</code></pre>
+<p>And that's it. Now if I hit <code>myurl?subreddit=Acadiana</code> I get a JSON dump of new posts for that subreddit. I'd share a dump but it's rather large. You can view/copy this workflow here: <a href="https://pipedream.com/@raymondcamden/daily-reddit-api-p_WxCkrw/edit">https://pipedream.com/@raymondcamden/daily-reddit-api-p_WxCkrw/edit</a></p>
+<p>So that's the API. To build my &quot;real&quot; workflow, the one handling gathering and emailing data, I built a new CRON-based workflow. For my second step, I used the &quot;get my subscribed subreddits&quot; action. I only needed to supply &quot;subscriber&quot; as an argument:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit9.png" alt="My subs actin" class="lazyload imgborder imgcenter">
+</p>
+<p>The next step is a Node one. This handles taking the results from the previous step and making the asynchronous calls to my API:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+
+	const axios = require(&quot;axios&quot;);
+
+	// simplify things a bit
+	let mysubs = steps.get_subreddits_mine_where.$return_value.data.children.map(s =&gt; {
+	return s.data;
+	})
+
+	// title, displayName
+	let promises = [];
+	mysubs.forEach(sub =&gt; {
+		let url = 'https://engtbib844m2yqb.m.pipedream.net?subreddit='+sub.display_name;
+		promises.push(axios({method:'get', url}));
+	});
+
+	let result = await Promise.all(promises);
+	// global post array we can sort in a bit
+	this.posts = [];
+
+	for(let i=0;i&lt;result.length;i++) {
+		this.posts = this.posts.concat(result[i].data.result);
+	}
+
+	this.posts.sort((a,b) =&gt; {
+		if(a.created_utc &lt; b.created_utc) return 1;
+		if(a.created_utc &gt;b.created_utc) return -1;
+		return 0;
+	});
+
+	console.log('total posts', this.posts.length);
+}
+</code></pre>
+<p>Note I also sort the posts by date. I think some people may prefer their &quot;report&quot; grouped by subreddit. I kind of liked the posts mixed up. The next step handled creating the email. I'm going to skip sharing the code because you can see it when I share the workflow and the only real change was to include the name of the subreddit. The final step was just the email action. And that's that.</p>
+<p>From my initial workflow to this one, it took me maybe one hour total. I loved that I had that flexibility and could basically just drop in steps like LEGO pieces. Here's a screen shot of the email:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/04/reddit10.png" alt="Final email" class="lazyload imgborder imgcenter">
+</p>
+<p>You can view/copy my workflow here: <a href="https://pipedream.com/@raymondcamden/daily-reddit-posts-2-p_ZJC9x9/edit">https://pipedream.com/@raymondcamden/daily-reddit-posts-2-p_ZJC9x9/edit</a></p>
+<p>I hope these examples were helpful, and keep in mind I'm still a new Pipedream user so (most likely) there's nicer ways of doing what I demonstrated. Leave me a comment below if you've got any questions!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

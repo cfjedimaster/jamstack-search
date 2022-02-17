@@ -1,0 +1,278 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using Liquid Blocks in Eleventy Layouts</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using Liquid Blocks in Eleventy Layouts</h2>
+<p>
+Written: 8/19/2021
+</p>
+
+
+<p>Today's post is based on an interesting question I ran into on StackOverflow: <a href="https://stackoverflow.com/questions/68834347/how-do-i-use-liquidjs-layout-blocks-in-eleventy">How do I use LiquidJS Layout Blocks in Eleventy?</a> The person asking the question was trying to accomplish the following:</p>
+<p>Eleventy makes it super easy to use templates with your work. You create a file, add front matter, and specify a layout file:</p>
+<pre><code>---
+title: Hello World
+layout: main
+---
+</code></pre>
+<p>You can then create a file, <code>_includes/main.liqdui</code>, and then render your content like so:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+	&lt;meta charset=&quot;utf-8&quot;&gt;
+	&lt;title&gt;&lt;/title&gt;
+	&lt;style&gt;
+	main {
+		padding: 30px;
+		background-color: #c0c0c0;
+	}
+	&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;main&gt;
+{{ content }}
+&lt;/main&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Layouts work great when your content lands in the middle of some block of HTML. But consider a layout that has a block that needs to be dynamic and that's <em>not</em> between a pair of tags?</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+	&lt;meta charset=&quot;utf-8&quot;&gt;
+	&lt;title&gt;&lt;/title&gt;
+	&lt;style&gt;
+	main {
+		padding: 30px;
+		background-color: #c0c0c0;
+	}
+
+	#footer {
+		margin-top: 10px;
+	}
+	&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;main&gt;
+{{ content }}
+&lt;/main&gt;
+
+&lt;footer&gt;
+	This is the footer.
+&lt;/footer&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>In the example above, we've added a footer element that right now is hard coded, but we'd like to have our page templates pass in content. So for example:</p>
+<pre><code class="language-html">&lt;footer&gt;
+{{footer}}
+&lt;/footer&gt;
+</code></pre>
+<p>So, one quick solution is to just use front matter!</p>
+<pre><code>---
+title: Hello World
+layout: main
+footer: This is the footer!
+---
+</code></pre>
+<p>That works perfectly fine, but really only works for short blocks of static content. If I wanted something more dynamic, I'd be out of luck. <a href="https://www.11ty.dev/docs/data-computed/">Computed Data</a> could be a solution, but the StackOverflow user was looking to use a Liquid feature, <a href="https://liquidjs.com/tags/layout.html#Blocks">Blocks</a>. Idealy, this is what they would like to do:</p>
+<pre><code>---
+title: Hello World
+layout: main
+---
+
+## Hello World!
+
+This is me testing.
+
+{% block footer %}
+This will be used in the footer.
+{% endblock %}
+
+</code></pre>
+<p>The result is not what you would expect:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/08/block1.jpg" alt="The web page rendered the footer in the main content" class="lazyload imgborder imgcenter">
+</p>
+<p>Ok, so what now? I did some Googling and found this Eleventy issue: <a href="https://github.com/11ty/eleventy/issues/1467">Using Nunjucks blocks from within Markdown</a>. In the issue, they described that in order to do this with Nunjucks, you can't use Eleventy layouts, but must specify the layout with Nunjucks itself.</p>
+<p>Alright, so I tried that in <code>test1.md</code>:</p>
+<pre><code class="language-html">---
+title: Test 1
+---
+
+{% layout main %}
+
+## Hello World!
+
+This is me testing.
+
+{% block footer %}
+This will be used in the footer.
+{% endblock %}
+
+</code></pre>
+<p>And... it kinda worked. But I noticed a few issues. First, I lost all my output. It looks like when Liquid executed in Markdown, it ended up folowing one of the Markdown rules where code that's tabbed over is meant to be used as <em>displayed</em> source code, so it escaped it. I fixed that by removing the tabs in my layout. Annoying, but I can deal. Then, to display my footer, I had to change from:</p>
+<pre><code class="language-html">{{ footer }}
+
+</code></pre>
+<p>To:</p>
+<pre><code class="language-html">{% block footer %}{% endblock %}
+
+</code></pre>
+<p>I'm ok with that change as it lets me specify a default value for footer as well. Now I've got this:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/08/block2.jpg" alt="Footer displayed, not the content" class="lazyload imgborder imgcenter">
+</p>
+<p>And if you think about it, the missing &quot;main&quot; content makes sense. I'm no longer using Eleventy to do my layout, so in <code>layout.liquid</code>, <code>{{ content }}</code> doesn't exist. (Well the code is there of course, I mean the <em>value</em> of content isn't set.)</p>
+<p>So how do we fix this now? Use blocks again. Here's <code>layout.liquid</code> now:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;title&gt;&lt;/title&gt;
+&lt;style&gt;
+main {
+	padding: 30px;
+	background-color: #c0c0c0;
+}
+
+#footer {
+	margin-top: 10px;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;main&gt;
+{% block content %}{% endblock %}
+&lt;/main&gt;
+
+&lt;footer&gt;
+{% block footer %}{% endblock %}
+&lt;/footer&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>And then back in <code>test1.md</code>:</p>
+<pre><code class="language-html">---
+title: Test 1
+---
+
+{% layout main %}
+
+{% block content %}
+## Hello World!
+
+This is me testing.
+{% endblock %}
+
+{% block footer %}
+This will be used in the footer.
+{% endblock %}
+</code></pre>
+<p>Woot! Now it's perfect! Except my <em>other</em> site pages don't work!</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/08/block3.jpg" alt="Main content is gone" class="lazyload imgborder imgcenter">
+</p>
+<p>On a page using Eleventy's built in layout processing, my content isn't working. Dangit. Luckily there's an easy, if somewhat hackish, solution:</p>
+<pre><code class="language-html">&lt;main&gt;
+{% block content %}{% endblock %}
+{{ content }}
+&lt;/main&gt;
+</code></pre>
+<p>On pages not using the footer block, the <code>content</code> variable will be declared. On pages using it, the <code>content</code> <em>block</em> will exist.</p>
+<p>Whew.</p>
+<p>So.... this <em>works</em>, and honestly it isn't too terribly ugly. But then I remembered something. A few weeks ago I <a href="https://www.raymondcamden.com/2021/07/12/creating-an-additive-capture-shortcode-in-eleventy">blogged</a> about creating &quot;additive&quot; capture blocks in Eleventy. Basically, I wanted to wrap content two or more times and have it append to one variable. I'd then display that variable.</p>
+<p>In that blog post, I created two shortcodes, one called <code>mycapture</code> and one called <code>displaycapture</code>. My code worked by storing the values so that I could add to it and then display it. Today I discovered a bug in that implementation (fixed in this post and will be fixed in the old post by the time you read this) but was able to quickly correct it. So here's my <code>.eleventy.js</code> with my shortcodes:</p>
+<pre><code class="language-js">module.exports = function(eleventyConfig) {
+
+	let _CAPTURES;
+	eleventyConfig.on('beforeBuild', () =&gt; {
+		//I need this to wipe _CAPTURES when editing pages, wouldn't be an issue in prod
+		_CAPTURES = {};
+	});
+	
+	
+	eleventyConfig.addPairedShortcode(&quot;mycapture&quot;, function (content, name) {
+		if(!_CAPTURES[this.page.inputPath]) _CAPTURES[this.page.inputPath] = {};
+		if(!_CAPTURES[this.page.inputPath][name]) _CAPTURES[this.page.inputPath][name] = '';
+		_CAPTURES[this.page.inputPath][name] += content;
+		return '';
+	});
+	
+	eleventyConfig.addShortcode(&quot;displaycapture&quot;, function(name) {
+		if(_CAPTURES[this.page.inputPath] &amp;&amp; _CAPTURES[this.page.inputPath][name]) return _CAPTURES[this.page.inputPath][name];
+		return '';
+	});
+
+};
+</code></pre>
+<p>So while we don't need <em>additive</em> shortcodes, we can now do this (in <code>test2.md</code>):</p>
+<pre><code class="language-html">---
+title: Test 2
+layout: main2
+---
+
+## Second Test
+
+This is me testing more.
+
+{% mycapture &quot;footer&quot; %}
+This is my footer!
+{% endmycapture %}
+
+</code></pre>
+<p>You'll notice I'm using <code>main2.liquid</code> for the layout. That's closer to my original version, but uses my shortcode for the footer:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+	&lt;meta charset=&quot;utf-8&quot;&gt;
+	&lt;title&gt;&lt;/title&gt;
+	&lt;style&gt;
+	main {
+		padding: 30px;
+		background-color: #c0c0c0;
+	}
+
+	#footer {
+		margin-top: 10px;
+	}
+	&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+	&lt;main&gt;
+	{{ content }}
+	&lt;/main&gt;
+
+	&lt;footer&gt;
+	{% displaycapture &quot;footer&quot; %}
+	&lt;/footer&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>I like this solution as it removes some of the complexity around the blocks and lets me keep using &quot;normal&quot; Liquid layouts. Anyway, as always, I'd love to hear what you think. You can find this solution here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/blockquestion">https://github.com/cfjedimaster/eleventy-demos/tree/master/blockquestion</a></p>
+<p>Photo by <a href="https://unsplash.com/@michaelfousert?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Michael Fousert</a> on <a href="https://unsplash.com/s/photos/block?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

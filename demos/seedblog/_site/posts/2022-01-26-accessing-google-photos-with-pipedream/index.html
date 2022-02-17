@@ -1,0 +1,195 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Accessing Google Photos with Pipedream</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Accessing Google Photos with Pipedream</h2>
+<p>
+Written: 1/26/2022
+</p>
+
+
+<p>Our family has had a Google Nest Hub in our kitchen for a year or two now. All of us use it every day for the most part. We'll use it for music, weather forecasts, and basic information queries. When not in use though it's got one of my favorite features - a digital photo album. I set mine up to continuously rotate photos from one of my Google Photos albums. Seeing the pictures always makes me smile and I was curious if I could bring that experience to the web. Obviously I could just open my browser to the <a href="https://photos.google.com">Google Photos</a> website, but I really wanted something like the hardware - a random picture. Here's how I ended up building it using one of my favorite workflow services, <a href="https://pipedream.com">Pipedream</a>.</p>
+<p>I began by creating a HTTP triggered workflow. I went into this process not knowing exactly how the Google Photos API would work, but I had hoped I could stream the bits back in the request allowing me to do something simple like, <code>&lt;img src=&quot;pipedream url&quot;&gt;</code>.</p>
+<p>Next I needed to make use of the Google Photos API. I did this by searching for &quot;Google Photos&quot; when adding a step. Note that this did <em>not</em> show up in the first page of apps oddly and I had to click &quot;Load More Apps&quot;:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/01/photos1.jpg" alt="Shot of PD UI to add a new step" class="lazyload imgborder imgcenter">
+</p>
+<p>This drops in a simple code step with an auth connection dropdown:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/01/photos2.jpg" alt="Code step for PD Google Photos action" class="lazyload imgborder imgcenter">
+</p>
+<p>I've shared in the past how Pipedream <em>really</em> makes authentication easy but I've got to mention it again. Nearly every time I've used a Google service in the past, roughly 75% of my time is just getting the damn authentication right. Once I get past that hurdle, their APIs are typically easy to use. Pipedream handles that for me. Once I you add an account, it simply provides the auth info for you so you can focus on actually <em>using</em> the API.</p>
+<p>I will warn you that at the time of me writing this, Google has not yet verified Pipedream's access for this service. You will get a scary-ish warning like so:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/01/photos3.jpg" alt="Warning from Google" class="lazyload imgborder imgcenter">
+</p>
+<p>The approval process is handled by Google and Pipedream started it sometime ago, so right now the delay is Google's fault. That being said, I trust Pipedream so I went ahead and approved it. Hopefully if you're reading this in the future, the warning is gone.</p>
+<p>With Pipedream handling the authentication, I can focus on process. The first step is to find my Favorites album:</p>
+<pre><code class="language-js">async (event, steps, auths) =&gt; {
+	let result = await require(&quot;@pipedreamhq/platform&quot;).axios(this, {
+		url: 'https://photoslibrary.googleapis.com/v1/albums',
+		headers: {
+			Authorization: `Bearer ${auths.google_photos.oauth_access_token}`,
+		},
+	});
+
+	let favorite = result.albums.find(a =&gt; {
+		return a.title === 'Favorites';
+	});
+
+	return favorite.id;
+}
+</code></pre>
+<p>Basically, I went to the Google Photos docs, found the endpoint for albums, and just pasted it in. Super simple and direct! I then simply filter the array down to the album I care about and return the ID.</p>
+<p>Next, I need the photos from that album. I added yet another action using Google Photos, and wrote this code:</p>
+<pre><code class="language-js">async (event, steps, auths) =&gt; {
+	let result = await require(&quot;@pipedreamhq/platform&quot;).axios(this, {
+		url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
+		headers: {
+			Authorization: `Bearer ${auths.google_photos.oauth_access_token}`,
+		},
+		method:'post',
+		data: {
+			albumId:steps.get_favorites_album.$return_value,
+			pageSize:100
+		}
+	});
+
+	return result.mediaItems;
+}
+</code></pre>
+<p>Note that I'm using the biggest page they support, one hundred. I've got about 69 photos in the album so I'll need to figure out a solution to paginate later on.</p>
+<p>Next, I added a vanilla Node.js step to get a random picture:</p>
+<pre><code class="language-js">async (event, steps) =&gt; {
+
+	// goes from min to max-1
+	const getRandomInt = function(min, max) {
+		min = Math.ceil(min);
+		max = Math.floor(max);
+		return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+	}
+
+	return steps.get_photos.$return_value[getRandomInt(0, steps.get_photos.$return_value.length)];
+
+}
+</code></pre>
+<p>One note on the above logic. I'm pretty sure the Google Home device doesn't just pick randomly, and instead iterates through the album. Or perhaps it's random, but unique. I could do that. I chose not to. :)</p>
+<p>For the final step, I added another Google Photos action, and returned the binary data from the workflow:</p>
+<pre><code class="language-js">async (event, steps, auths) =&gt; {
+
+	const result = await require(&quot;@pipedreamhq/platform&quot;).axios(this, {
+		url: steps.select_photo.$return_value.baseUrl,
+		headers: {
+			Authorization: `Bearer ${auths.google_photos.oauth_access_token}`,
+		},
+		responseType:'arraybuffer'
+	});
+
+	await $respond({
+		status:200,
+		headers: {
+			'Content-Type':'image/jpeg'
+		},
+		body:result
+	})
+
+}
+</code></pre>
+<p>And it worked! I opened my browser to the URL and got a pic. As I reloaded, it randomly selected new ones (here's one of my favorite favorites):</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2022/01/photos4.jpg" alt="Daughter reading a Star Wars comic" class="lazyload imgborder imgcenter">
+</p>
+<p>So... I was done. And happy with it. But - of course - I decided to tweak it a bit. Specifically I decided to add a cache. Pipedream has an incredibly simple key/value system called <a href="https://pipedream.com/docs/workflows/steps/code/state/#workflow-state">$checkpoint</a>. It lets you store data at a per workflow or step level. Going through my workflow, I made the following changes.</p>
+<p>First, in my code to figure out the Favorites album, I cached it forever:</p>
+<pre><code class="language-js">async (event, steps, auths) =&gt; {
+
+	if($checkpoint &amp;&amp; $checkpoint.favoriteAlbum) return $checkpoint.favoriteAlbum;
+
+	let result = await require(&quot;@pipedreamhq/platform&quot;).axios(this, {
+	url: 'https://photoslibrary.googleapis.com/v1/albums',
+	headers: {
+		Authorization: `Bearer ${auths.google_photos.oauth_access_token}`,
+	},
+	});
+
+	let favorite = result.albums.find(a =&gt; {
+		return a.title === 'Favorites';
+	});
+
+	if(!$checkpoint) $checkpoint = { };
+	$checkpoint.favoriteAlbum = favorite.id;
+
+	return favorite.id;
+
+}
+</code></pre>
+<p>Next, in my step to get photos, I added a 6 hour cache. Honestly I probably only add a photo to this album a few times a month, but I figured 6 hours was ok.</p>
+<pre><code class="language-js">async (event, steps, auths) =&gt; {
+
+	/*
+	Fetch photos once every six hours
+	*/
+	let cacheDuration = 6 * 60 * 60 * 1000;
+	let now = Date.now();
+
+	if($checkpoint &amp;&amp; $checkpoint.photoCacheTime &amp;&amp; (now - $checkpoint.photoCacheTime &lt; cacheDuration) &amp;&amp; $checkpoint.photoCache) return $checkpoint.photoCache;
+	console.log('not cached'); 
+
+	let result = await require(&quot;@pipedreamhq/platform&quot;).axios(this, {
+	url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
+	headers: {
+		Authorization: `Bearer ${auths.google_photos.oauth_access_token}`,
+	},
+	method:'post',
+	data: {
+		albumId:steps.get_favorites_album.$return_value,
+		pageSize:100
+	}
+	});
+
+	// cache baseUrl
+	let photos = result.mediaItems.map(m =&gt; m.baseUrl);
+	$checkpoint.photoCacheTime = now;
+	$checkpoint.photoCache = photos;
+	console.log('stored cache time of ', $checkpoint.photoCacheTime);
+
+	return photos;
+
+}
+</code></pre>
+<p>And that was it. Maybe five or so minutes of work, but the difference was amazing. On average, my initial workflow was taking four seconds to process. After this change that time went down to one second.</p>
+<p>Want to try this yourself? Fork my workflow here: <a href="https://pipedream.com/@raymondcamden/randomfavoritephoto-2-p_mkCDxrY">https://pipedream.com/@raymondcamden/randomfavoritephoto-2-p_mkCDxrY</a></p>
+<p>By the way, you can build a cheap auto reload web page in two seconds with the old meta refresh tag:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;
+Favorite Photos
+&lt;/title&gt;
+&lt;meta http-equiv=&quot;refresh&quot; content=&quot;5;url=./test.html&quot;&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+	&lt;img src=&quot;https://secreturl&quot;&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Enjoy, and let me know what you think!</p>
+<p>Photo by <a href="https://unsplash.com/@lauracathleen?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Laura Fuhrman</a> on <a href="https://unsplash.com/s/photos/photo-album?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

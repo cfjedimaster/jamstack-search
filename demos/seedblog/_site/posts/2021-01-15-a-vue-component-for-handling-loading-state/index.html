@@ -1,0 +1,130 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>A Vue Component for Handling Loading State</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>A Vue Component for Handling Loading State</h2>
+<p>
+Written: 1/14/2021
+</p>
+
+
+<p>I've been doing some Vue consulting recently with a client and he came up with an interesting scenario. He asked about adding a &quot;loading&quot; state to his UI such that when
+a user clicked a button, it was obvious &quot;something&quot; was going on. This is actually something I've covered before in my <a href="https://www.raymondcamden.com/tags/vue+quick+shot/">Vue Quick Shots</a> series:</p>
+<p><a href="https://www.raymondcamden.com/2020/03/02/vue-quick-shot-disabling-a-submit-button-while-waiting-for-an-ajax-call">Vue Quick Shot - Disabling a Submit Button While Waiting for an Ajax Call</a>
+<a href="https://www.raymondcamden.com/2020/03/04/vue-quick-shot-using-a-loading-message">Vue Quick Shot - Using a Loading Message</a></p>
+<p>It's fairly simple and basically comes down to the following pseudo-code:</p>
+<pre><code class="language-js">set a flag that tells the UI to disable the button or show a loading msg
+do your slow Async process
+when done, toggle that flag
+</code></pre>
+<p>While that's fairly simple, my client wanted to see if he could turn it into a component. At first I told him this felt like overkill, but he was concerned, rightly so, that if he had multiple buttons on a page doing the same thing, that he didn't want multiple different flags for each one.</p>
+<p>Together we built up a simple demo of this and it's interesting, but I'm also unsure of one aspect of it and I'd love to get some feedback. I'll share a link to all the code at the end of this post, but let's start with the component.</p>
+<p>First, I named it <code>AnotherClickWait</code>. That's a pretty bad name but it will make sense in a minte I think. First let's look at the HTML and style of the component:</p>
+<pre><code class="language-html">&lt;template&gt;
+  &lt;button @click=&quot;clicked&quot; :disabled=&quot;loading&quot;&gt;
+    &lt;slot&gt;&lt;/slot&gt;
+  &lt;/button&gt;
+&lt;/template&gt;
+
+&lt;style&gt;
+button {
+  padding: 20px;
+}
+
+button:disabled {
+  font-style: italic;
+}
+&lt;/style&gt;
+</code></pre>
+<p>As you can see it's pretty simple. It's got a click event and a disabled property. The only reason I bothered styling it is that I noticed that the disabled state didn't look very disabled. That could be a CodeSandbox issue (where I have the demo), but I just wanted something more in your face. The <code>slot</code> tag lets you pass in the text for the button.</p>
+<p>Now for the code:</p>
+<pre><code class="language-js">export default {
+  name: &quot;AnotherClickWait&quot;,
+  data() {
+    return {
+      loading: false
+    }
+  },
+  methods:{
+    clicked() {
+      this.loading = true;
+      this.$emit('click', () =&gt; {
+        this.loading = false;
+      })
+    }
+  }
+};
+</code></pre>
+<p>Ok, so there's a few things to note here. First, I use a flag, <code>loading</code>, that will handle, internally, the state of, well, loading. In order for the parent using the component to know the click event happened, I used <code>this.$emit</code>, and here's where things get interesting.</p>
+<p>How does the parent let the button know that it's done doing whatever it's doing? This is where my client came up with the idea. The event passes a function as an argument that the caller can use to tell the button it's done doing whatever logic it's supposed to be doing.</p>
+<p>This part in particular was fascinating to me and also a bit worriesome. I don't know why, it's a good solution, but it's the main reason I'm blogging this as I'd like to get some feedback.</p>
+<p>Using the component looks like so:</p>
+<pre><code class="language-html">&lt;AnotherClickWait style=&quot;background-color:#c0c0c0&quot; @click=&quot;doFoo&quot;&gt;One More Darn Button&lt;/AnotherClickWait&gt;
+</code></pre>
+<p>And then here's the event handler:</p>
+<pre><code class="language-js">doFoo(done) {
+	setTimeout(() =&gt; {
+		console.log('im done with whatever biz logic');
+		done();
+	},3000);
+}
+</code></pre>
+<p>As you can see, I expect to be called with a function that I can run when I'm done. I think what bothers me is that this feels like a bad dependancy, but on the other hand, the client (in this case the code using the component), <em>has</em> to be responsible for knowing when things are done.</p>
+<p>Make sense?</p>
+<p>So yeah, about that name. The client is using <a href="https://vuetifyjs.com/en/">Vuetify</a> for his UI library and his component actually wrapped <code>v-btn</code> instead. This created an odd issue where the props in the parent component, named <code>ClickWait</code>, did <em>not</em> propagate down to <code>vue-btn</code>.</p>
+<p>I asked about this on Twitter and Alex was happy to help me out:</p>
+<blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr">So i have noticed this behavior as well, and i tend to always add a v-bind and v-on so that i am explicitly passing things through. I don&#39;t know why it gets weird about it sometimes.</p>&mdash; Alex Riviere (@fimion) <a href="https://twitter.com/fimion/status/1349865473668689921?ref_src=twsrc%5Etfw">January 14, 2021</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+<p>From what we can see, <em>something</em> is going wrong, and we have to manually bind the arguments in. Here's the entirety of that component:</p>
+<pre><code class="language-html">&lt;template&gt;
+  &lt;v-btn @click=&quot;clicked&quot; v-bind=&quot;$attrs&quot; :loading=&quot;loading&quot;&gt;
+    &lt;slot&gt;&lt;/slot&gt;
+  &lt;/v-btn&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+
+export default {
+  name: &quot;ClickWait&quot;,
+  inheritAttrs:&quot;false&quot;,
+  data() {
+    return {
+      loading: false
+    }
+  },
+  methods:{
+    clicked() {
+      this.loading = true;
+      this.$emit('click', () =&gt; {
+        this.loading = false;
+      })
+    }
+  }
+};
+&lt;/script&gt;
+</code></pre>
+<p>It's <em>mostly</em> the same but we disable prop inheritance and manually bind it. Again, this is <em>not</em> what we thought we would have to do, but it worked. Want to see it in action? Try out the CodeSandbox below:</p>
+<iframe src="https://codesandbox.io/embed/vibrant-mirzakhani-xwrgv?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="vibrant-mirzakhani-xwrgv"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+   ></iframe>
+<p>Again, I'd love to hear what people think of this approach. Leave me a comment below.</p>
+<p><span>Photo by <a href="https://unsplash.com/@dorographie?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Dorothea OLDANI</a> on <a href="https://unsplash.com/s/photos/kitten?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

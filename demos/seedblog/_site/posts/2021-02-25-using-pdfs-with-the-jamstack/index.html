@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Using PDFs with the Jamstack</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Using PDFs with the Jamstack</h2>
+<p>
+Written: 2/24/2021
+</p>
+
+
+<p>Earlier this week I spent some time working on a demo that combined the Jamstack (with <a href="https://www.11ty.dev/">Eleventy</a> of course) and the ability to work with PDFs. I recently <a href="https://www.raymondcamden.com/2021/02/17/using-the-pdf-embed-api-with-vuejs">blogged</a> about using Adobe's free <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">PDF Embed API</a> with Vue.js and I thoughbt it would be interesting to tie this in with a Jamstack example. Here's what I came up with.</p>
+<p>First, I <strike>stole</strike>borrowed a bunch of PDFs from the IRS. I figure they own me a few PDFs, right? I grabbed around ten or so and put them into two subdirectories based on whether they were a form or instructions for a form (and to be clear, I didn't <em>really</em> check, I just kinda threw some around):</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/pdfj1.jpg" alt="Screen shot of a list of PDF files" class="lazyload imgborder imgcenter">
+</p>
+<p>With my source material available, the first thing I had to do was ensure the PDFs ended up being available on the static site. By default, Eleventy is going to ignore the PDFs as they aren't recognized as supported files (much like it ignores JavaScript, CSS, and images). This is easy enough to fix with <a href="https://www.11ty.dev/docs/copy/">passthrough copy</a>. I added the following to my <code>.eleventy.js</code>:</p>
+<pre><code class="language-js">eleventyConfig.addPassthroughCopy(&quot;pdfs&quot;);
+</code></pre>
+<p>This will recursively grab my <code>pdfs</code> folder and the files underneath it. That part was relatively simple. (Although I think this particular aspect - the &quot;dont copy what I don't recognize&quot; is the single most common thing I screwed up when learning Eleventy!)</p>
+<p>Next, I need to make Eleventy &quot;aware&quot; of the PDF data. I can't use <a href="https://www.11ty.dev/docs/collections/">Collections</a> feature as it only works with files Eleventy recognizes. Instead I can use the <a href="https://www.11ty.dev/docs/data/">Data</a> feature which lets you add pretty much anything you want. Inside of <code>_data</code>, I created <code>pdfs.js</code>:</p>
+<pre><code class="language-js">const globby = require('globby');
+
+module.exports = async function() {
+	let result = [];
+
+	let files = await globby('./pdfs/**/*.pdf');
+	
+	for(let i=0; i &lt; files.length; i++) {
+		//name safe for a directory
+		let name = files[i].split('/').pop().replace('.pdf', '');
+		result.push({
+			path:files[i],
+			name:name
+		});
+	}
+	
+	return result;
+};
+</code></pre>
+<p>Basically - get all the files under my <code>pdfs</code> folder and create an array that contains the path as well as a 'name' field, which for me was just the filename minus the extension.</p>
+<p>Once this was done, I could then the <code>pdfs</code> array in my Liquid templates, so for example, here is my home page:</p>
+<pre><code class="language-html">---
+layout: main
+---
+
+&lt;h2&gt;PDFs&lt;/h2&gt;
+
+&lt;ul&gt;
+{% for pdf in pdfs %}
+&lt;li&gt;&lt;a href=&quot;pdf/{{pdf.name}}&quot;&gt;{{ pdf.name }}&lt;/a&gt;&lt;/li&gt;
+{% endfor %}
+&lt;/ul&gt;
+</code></pre>
+<p>You'll notice that I'm linking to <code>pdf</code>, not <code>pdfs</code>. Why? I could link directly to the where I copied the PDF file, and modern browsers will render it full screen. However, the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/pdf-embed.html">PDF Embed API</a> will give us much more control over the experience and let us present it inside our site user interface as well.</p>
+<p>To support this, I used Eleventy's <a href="https://www.11ty.dev/docs/pages-from-data/">&quot;pages from data&quot;</a> feature to create new HTML pages to render my PDF documents. Here's how I did it:</p>
+<pre><code class="language-html">---
+pagination:
+    data: pdfs
+    size: 1
+    alias: pdf
+permalink: &quot;pdf/{{ pdf.name }}/&quot;
+layout: main
+---
+
+&lt;h2&gt;{{ pdf.name }}&lt;/h2&gt;
+
+&lt;div id=&quot;adobe-dc-view&quot;&gt;&lt;/div&gt;
+
+&lt;script src=&quot;https://documentcloud.adobe.com/view-sdk/main.js&quot;&gt;&lt;/script&gt;
+&lt;script type=&quot;text/javascript&quot;&gt;
+document.addEventListener(&quot;adobe_dc_view_sdk.ready&quot;, () =&gt; {
+	var adobeDCView = new AdobeDC.View({clientId: &quot;{{ site.pdfkey }}&quot;, divId: &quot;adobe-dc-view&quot;});
+	adobeDCView.previewFile(
+	{
+		content:   {location: {url: &quot;{{site.url}}/{{ pdf.path }}&quot;}},
+		metaData: {fileName: &quot;{{pdf.name}}pdf&quot;}
+	});
+});
+&lt;/script&gt;
+
+</code></pre>
+<p>From the top, I use the Pagination feature to iterate over my <code>pdfs</code> array. I specify a permalink under the <code>pdf</code> folder (quick side note - my source directory uses two subdirectories - it's possible that I could have two or more PDFs of the same name and this would cause a problem here - a fix would be to replicate the same subdirectory strucutre as the source - let me know if you want to see that) and for each one, I output the name of the PDF and then use the simple JavaScript embed code.</p>
+<p>This code is pretty much boilerplate from the embed docs with a few things to note.</p>
+<p>First, I needed a key. To do this, I created a new project on Adobe's dashboard. I already had one for my localhost system, but right now your keys are limited to one domain at a time. I knew I was going to deploy this to Vercel so I went ahead and created a new project and key just for that. You'll notice I'm using <code>site.pdfkey</code>. I'll explain this in a bit.</p>
+<p>Next, I need to specify a full URL for the PDF. For this, I use <code>site.url</code>. Both of the <code>site</code> values come from another data file, <code>site.js</code>:</p>
+<pre><code class="language-js">module.exports = async function() {
+
+	let url = 'http://localhost:8080';
+
+	if(process.env.VERCEL_ENV &amp;&amp; process.env.VERCEL_ENV === 'production') url = 'https://pdftest.vercel.app'
+	//my localhost key
+	let pdfkey = process.env.PDF_KEY?process.env.PDF_KEY:'9861538238544ff39d37c6841344b78d'
+
+	return {
+		url,
+		pdfkey
+	}
+};
+</code></pre>
+<p>For the URL I switch to my Vercel site if I detect I'm in production. Ditto for the key value. That hard coded value is the one I use for localhost so it will run locally only.</p>
+<p>And that's really it. When the Eleventy site is generated, I end up with HTML files under <code>pdf/</code> and the raw PDFs under <code>/pdfs</code>. That's not terribly good naming but it works well enough I think. Here's an example of one of the pages.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/02/pdfj2.jpg" alt="Example web page showing PDF embed" class="lazyload imgborder imgcenter">
+</p>
+<p>You can test this yourself here: <a href="https://pdftest.vercel.app">https://pdftest.vercel.app</a>. As a reminder, I used the most basic embed possible. Check the <a href="https://www.adobe.io/apis/documentcloud/dcsdk/docs.html?view=view">docs</a> for more examples of how you can configure it. You can find the source here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest">https://github.com/cfjedimaster/eleventy-demos/tree/master/pdftest</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

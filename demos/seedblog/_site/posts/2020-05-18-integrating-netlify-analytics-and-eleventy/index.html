@@ -1,0 +1,184 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Integrating Netlify Analytics and Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Integrating Netlify Analytics and Eleventy</h2>
+<p>
+Written: 5/17/2020
+</p>
+
+
+<p>Before I begin, know that I'm using an <em>undocumented</em> part of the <a href="https://open-api.netlify.com/">Netlify API</a> so you should proceed with caution. I've been waiting for them to release the docs for sometime now (although it didn't stop me from building my own <a href="https://www.raymondcamden.com/2019/10/05/building-a-netlify-stats-viewer-in-vuejs">demo</a>) and I'm not sure if it will ever happen, but in the meantime, I'll continue to play with it. Alright, so with that out of the way, this weekend I worked on a cool little thing I've added to my blog. While you can see it on the right hand side, it's this list of links here:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/pp1.png" alt="List of Popular Posts" class="lazyload imgborder imgcenter">
+</p>
+<p>This list was created by hitting the Netlify Analytics API for the site, getting the most viewed content in the past seven days, and then &quot;manipulated&quot; a bit before rendering. Let me describe the steps it took to get here.</p>
+<h2>Getting the Analytics</h2>
+<p>Step one was to get the raw data. First, I created a Personal Access Token. This is done under your user profile at Netlify in the Applications section:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/05/pp2.png" alt="Applications page" class="lazyload imgborder imgcenter">
+</p>
+<p>Once I had the key, I first wrote a script to get all of my sites. This was just so I could get the ID of my blog.</p>
+<pre><code class="language-js">const fetch = require('node-fetch');
+let token = 'my key brings all the boys to the yard';
+
+(async () =&gt; {
+
+	let result = await fetch(`https://api.netlify.com/api/v1/sites?access_token=${token}`);
+	let data = await result.json();
+	data.sort((a,b) =&gt; {
+		if(a.name &lt; b.name) return -1;
+		if(a.name &gt; b.name) return 1;
+		return 0;
+	});
+	
+	data.forEach(d =&gt; {
+		console.log(d.name.padEnd(50, ' ') + d.site_id);
+	});
+
+})();
+</code></pre>
+<p>With the ID, I then used the undocumented API to get pages with the most views. I filter to a date range from now till seven days ago. In case your curious, I discovered these API calls by using my browser developer tools.</p>
+<pre><code class="language-js">const fetch = require('node-fetch');
+let token = 'damn right its better than yours';
+let siteId = 'the id';
+
+(async () =&gt; {
+
+	let today = new Date();
+	let lastWeek = new Date();
+	lastWeek.setDate(today.getDate() - 7);
+
+	let url = `https://analytics.services.netlify.com/v1/${siteId}/pages?from=${lastWeek.getTime()}&amp;to=${today.getTime()}&amp;timezone=-0500&amp;limit=10`;
+	
+	let result = await fetch(url, {
+		headers: {
+			'Authorization':`Bearer ${token}`
+		}
+	});
+	let dataOb = await result.json();
+	console.log(dataOb.data);	
+
+})();
+</code></pre>
+<p>This is how the result looks:</p>
+<pre><code class="language-js">[
+  { path: '/', count: 19221 },
+  { path: '/recentPosts/', count: 13885 },
+  { path: '/2019/05/01/handling-errors-in-vuejs', count: 683 },
+  { path: '/2020/05/15/lets-make-everyone-a-queen', count: 619 },
+  {
+    path: '/2018/02/08/building-table-sorting-and-pagination-in-vuejs',
+    count: 591
+  },
+  { path: '/2020/05/14/want-to-learn-vuejs', count: 570 },
+  {
+    path: '/2019/08/08/drag-and-drop-file-upload-in-vuejs',
+    count: 484
+  },
+  {
+    path: '/2019/08/12/working-with-the-keyboard-in-your-vue-app',
+    count: 386
+  },
+  { path: '/2019/09/01/using-geolocation-with-vuejs', count: 370 },
+  {
+    path: '/2013/09/10/Adding-a-file-display-list-to-a-multifile-upload-HTML-control',
+    count: 366
+  }
+]
+</code></pre>
+<p>Right away you'll notice the first result is for the home page, something I'm going to ignore. The second result, <code>/recentPosts/</code>, is a result of an optimization I did for the site that I'll explain in a bit, because it comes into factor for this how I added this feature as well.</p>
+<p>Alright, let's get this into Eleventy!</p>
+<h2>Integrating with Eleventy</h2>
+<p>I began my integration with Eleventy by adding a new global data file named popularposts.js. This is - easily - one of my favorite features of Eleventy. By setting this up in my global data file I'm able to have it available for my pages later. Here is the code in the proper format with Eleventy:</p>
+<pre><code class="language-js">const fetch = require('node-fetch');
+
+module.exports = function() {
+
+	let token = process.env.NETLIFY_TOKEN;
+	let siteId = process.env.NETLIFY_SITE_ID;
+
+	return new Promise(async (resolve, reject) =&gt; {
+
+		let today = new Date();
+		let lastWeek = new Date();
+		lastWeek.setDate(today.getDate() - 7);
+
+		let url = `https://analytics.services.netlify.com/v1/${siteId}/pages?from=${lastWeek.getTime()}&amp;to=${today.getTime()}&amp;timezone=-0500&amp;limit=15`;
+		
+		let result = await fetch(url, {
+			headers: {
+				'Authorization':`Bearer ${token}`
+			}
+		});
+		let dataOb = await result.json();
+
+		let pages = dataOb.data.filter(d =&gt; {
+			if(d.path === '/' || d.path === '/recentPosts/') return false;
+			return true;
+		});
+		resolve(pages);
+
+	});
+
+};
+</code></pre>
+<p>There's a few things different though. First, note that the token and siteId are loaded via environment variables. I set these up in my site settings and noticed that it didn't work with <code>netlify dev</code>. This usually does work fine so I <a href="https://community.netlify.com/t/access-environment-variables-outside-of-functions/14834">posted</a> on their support forums to see what's up. In the meantime I just set the variables myself.</p>
+<p>Next, notice I added a filter to remove both <code>/</code> and <code>/recentPosts/</code>. I think most folks will need the first one, but not the second. It may have been better to use a regular expression to only match posts. Since my posts are all date based, I could have looked for /2*** for example.</p>
+<p>That worked great but then I realized a problem. While the Netlify API returned the path to the page, it didn't return the title or date of the blog post. This is where things then got a bit tricky. At the time this data file runs, you do not have access to collection information, where my posts live. That's because data <em>drives</em> the pages so it has to load first.</p>
+<p>In order to get this working, I did the following. First, here's my layout:</p>
+<pre><code class="language-html">{% if popularposts %}
+&lt;section class=&quot;widget widget-recent-posts&quot;&gt;
+&lt;h2 class=&quot;widget-title&quot;&gt;Popular Posts&lt;/h2&gt;
+&lt;ul class=&quot;recent-posts&quot;&gt;
+	{% for post in popularposts limit:5 %}
+		{% assign postData = post.path | toTitle: collections.posts %}
+		{% if postData.title != &quot;&quot; %}
+&lt;li class=&quot;recent-item&quot;&gt;&lt;a href=&quot;{{ site.url }}{{ post.path }}&quot;&gt;{{ postData.title }}&lt;/a&gt; &lt;span&gt; {{ postData.date | date: &quot;%B %e, %Y&quot; }}&lt;/span&gt;&lt;/li&gt;
+		{% endif %}
+	{% endfor %}
+&lt;/ul&gt;
+&lt;/section&gt;
+{% endif %}
+
+</code></pre>
+<p>I first see if I have popularposts (my data call could fail), and then loop over each result. For each, I use a filter, <code>toTitle</code>, to &quot;convert&quot; the path into page data that includes my title and date. (So <code>toTitle</code> isn't the best name.) This filter is defined in <code>.eleventy.js</code>:</p>
+<pre><code class="language-js">let titlePostCache = {};
+eleventyConfig.addFilter('toTitle', (p, posts) =&gt; {
+  if(titlePostCache[p]) return titlePostCache[p];
+  for(let i=0;i&lt;posts.length;i++) {
+    if(posts[i].url == p) {
+      titlePostCache[p] = { title: posts[i].data.title, date: posts[i].date};
+      return titlePostCache[p];
+    }
+  }
+  // cache that we couldn't match
+  titlePostCache[p] = { title: ''};
+  return titlePostCache;
+});
+</code></pre>
+<p>For each path, I loop over the posts collection, look for a match, and reutrn the title and date if so. Notice I use a cache for performance.</p>
+<p>This worked well, but when I initially put in my template, it required a rebuild of every single page in the site when run. Because of that I employed the same technique I used for my last five posts content. I put them both in a single file template (<code>/recentPosts/</code>) that's loaded via a quick jQuery call:</p>
+<pre><code class="language-js">$('#recentPosts').load('/recentPosts/');
+</code></pre>
+<p>I don't even use JSON, I just load the raw HTML right into the DOM on the side there.</p>
+<p>And that's it. Now, one thing you'll probably notice is that this data is only generated when I built the site. I can easily address that by scheduling a daily build. But as I blog once or twice a week <em>very</em> consistently and since this isn't &quot;business crucial&quot; information, I'm fine with it updating whenever I post a new blog entry (or make another tweak, like to my <a href="/speaking">speaking</a> page. If you want to see more of the code behind this, you can find it at the repo for this blog: <a href="https://github.com/cfjedimaster/raymondcamden2020">https://github.com/cfjedimaster/raymondcamden2020</a>.</p>
+<p>p.s. I'm also planning on looking at a Google Analytics version of this. They've got an <a href="https://developers.google.com/analytics/devguides/reporting/core/v3/reference">API</a> so if I get time this week, I'll post a follow up!</p>
+<p><i>Header photo by <a href="https://unsplash.com/@isaacmsmith?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Isaac Smith</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

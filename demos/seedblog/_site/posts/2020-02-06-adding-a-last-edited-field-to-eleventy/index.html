@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Adding a Last Edited Field to Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Adding a Last Edited Field to Eleventy</h2>
+<p>
+Written: 2/5/2020
+</p>
+
+
+<p>Let me begin by asking for some patience here as this post may ramble a bit. It certainly ended up going in directions I didn't expect when I built my proof of concept. If anything doesn't make sense, or I may some silly mistake, absolutely leave me a quick comment below and let me know. Alright, so with that out of the way, what in the heck am I writing about today?</p>
+<p>Next week I'm going to be giving a <a href="https://cfe.dev/events/flashback-conference-2020/">presentation</a> at Flashback Conference in Orlando about the &quot;dynamic&quot; web. As part of my presentation I talk about <a href="https://httpd.apache.org/docs/current/howto/ssi.html">Apache Server Side Includes</a>. This was a <em>very</em> early way to add some dynamic capabilities to HTML pages. One of the examples given is to include the date the page was last modified. If you're curious, it looked like so:</p>
+<pre><code class="language-html">This document last modified &lt;!--#flastmod file=&quot;index.html&quot; --&gt;
+</code></pre>
+<p>It occurred to me that you really don't see this much anymore on the web. Early on though it was pretty common for web pages to document when they last changed. That being said, it actually seems like a <em>really</em> good idea for technical documentation.</p>
+<p>I thought I'd check and see how this could be accomplished with Eleventy. I was also curious if this could be automatic. So for example, if I edit <code>docs/lightsaber.md</code> then I'd like the published site to be able to access the edit time by looking at the file's metadata.</p>
+<p>So, first off, every Eleventy page has <a href="https://www.11ty.dev/docs/data/">data</a> automatically included in a <code>page</code> scope. Included in this is a <code>date</code> value you could use: <code>{{ page.date }}</code></p>
+<p>The docs have this to say about it:</p>
+<blockquote>
+The date associated with the page. Defaults to the content’s file created date but can be overridden. Read more at Content Dates.
+</blockquote>
+<p>As it defaults to the created date, this wouldn't work for me, but I was curious to see it in action anyway so I built up a quick demo. I made a new site, added a folder called <code>docs</code>, and configured it as a new collection:</p>
+<pre><code class="language-js">eleventyConfig.addCollection(&quot;docs&quot;, function(collection) {
+	return collection.getFilteredByGlob(&quot;docs/*.md&quot;).sort((a,b) =&gt; {
+		if(a.data.title &lt; b.data.title) return -1;
+		if(a.data.title &gt; b.date.title) return 1;
+		return 0;
+	});
+});
+</code></pre>
+<p>I then added a few files and used a layout:</p>
+<pre><code class="language-html">---
+layout: doc
+title: Apple
+---
+
+This is about apple.
+</code></pre>
+<p>My doc layout has this:</p>
+<pre><code class="language-html">---
+layout: layout
+---
+
+{{ content }}
+
+&lt;footer&gt;
+This document was last updated {{ page.date }}.
+&lt;/footer&gt;
+</code></pre>
+<p>I fired up my Eleventy server and hit my doc pages and confirmed they rendered right. I then modified one doc page, reloaded, and noticed something odd. Every single doc page had a new value for their date!</p>
+<p>I mentioned this in <a href="https://join.slack.com/t/thenewdynamic/shared_invite/enQtMjkwNjYwNTY0NjkxLWI1NDhlNjZkZjA5ZGJmODE1OThiMjkwN2ZkMzE1YjEwN2YwNWUxYTNjZTUxMGQ2MzU3NWQ0YmVjNGU1NTkxMDk">Slack</a> (that's a great place to talk JAMStack stuff!) and I was reminded that when you edit content in Eleventy, it will rebuild the entire site on each change. (This <a href="https://github.com/11ty/eleventy/issues/108">may change</a> with a command line flag.)</p>
+<p>Alright, so now it made sense. Given two doc pages, every time I edited one, then both were recreated. But then I saw something odd.</p>
+<p>Imagine two doc pages, <code>apple.md</code> and <code>banana.md</code>. Both were made at 10AM. I edited <code>banana.md</code> sometime later. When I generated my site, I saw that the resultant HTML files appeared to be using the last modified value, not the creation time. In other words, I expected both to have the same date (or within miliseconds), but <code>banana/index.html</code> clearly had a later value.</p>
+<p>So in theory kind of working like I wanted, but I didn't quite trust it. I quickly looked up how to get information about a file from the operating system and noticed something odd - apparently it had no &quot;creation&quot; value.</p>
+<img src="https://static.raymondcamden.com/images/2020/02/date1.png" alt="Output from the CLI showing no birth" class="imgborder imgcenter">
+<p>I'm using Ubuntu via WSL on Windows, so I quickly checked what Windows had to say, and it clearly had a value:</p>
+<img src="https://static.raymondcamden.com/images/2020/02/date2.png" alt="Windows Explorer file info" class="imgborder imgcenter">
+<p>I did some digging and it looks like it might be this: <a href="https://askubuntu.com/questions/918300/when-is-birth-date-for-a-file-actually-used">When is Birth Date for a file actually used?</a></p>
+<p>So if there is something with the operating system, my next question, does Eleventy try to get the creation date, fail, and then go to the last updated value? I filed an <a href="https://github.com/11ty/eleventy/issues/900">issue</a> asking about that and I'm waiting to hear back.</p>
+<p>Ok, still with me? Keeping in mind that I knew this wasn't the best approach, I did one more test. I put my code in a repository, added it to Netlify, and checked the result. On Netlify, the values for every doc page were the same. If I edited one doc, committed the change, and waited for Netlify to build it, I saw the same thing. Both docs had the same file and as far as I could tell, it was the &quot;created&quot; value after Netlify pulled the files down. To me this felt totally right in terms of how I expected things to work and my local environment was just... wrong. Kinda.</p>
+<p>The next step than was to put the onus on the writers to include a date. That isn't horrible at all of course, and can easily be done in frontmatter. So for example:</p>
+<pre><code class="language-html">---
+layout: doc
+title: Apple
+date: 2020-02-03
+---
+</code></pre>
+<p>and</p>
+<pre><code class="language-html">---
+layout: doc
+title: Banana
+date: 2020-02-04
+---
+</code></pre>
+<p>When you use <code>date</code> in front matter, it overrides <code>page.date</code> as documented <a href="https://www.11ty.dev/docs/dates/">here</a>. You could also use your own field, like <code>lastEdited</code> or some such, and if you do, then don't forget to address it as that, not <code>page.whatever</code>.</p>
+<p>To make it look nicer, I added a filter as well:</p>
+<pre><code class="language-js">eleventyConfig.addFilter(&quot;dateFormat&quot;, function(value) {
+	return `${value.getMonth()+1}/${value.getDate()}/${value.getFullYear()}`;
+});
+</code></pre>
+<p>And then finally edited my layout:</p>
+<pre><code class="language-html">This document was last updated {{ page.date | dateFormat }}.
+</code></pre>
+<p>You could also extend this idea a bit and support something like this:</p>
+<pre><code class="language-html">---
+layout: doc
+title: Banana
+lastEditDate: 2020-02-04
+lastEdit: Added context about how cool are cats are.
+</code></pre>
+<p>This example shows both a date for the edit and a message about what changed. Since you've got access to all your data in any place in Eleventy, you could build a page that collected these messages and generated a change log automatically!</p>
+<p>So if for some reason you want to see this in action, you can see a live view here: <a href="https://determined-liskov-3626af.netlify.com/">https://determined-liskov-3626af.netlify.com/</a>. And the source may be found here: <a href="https://github.com/cfjedimaster/eleventy-demos/tree/master/datetest">https://github.com/cfjedimaster/eleventy-demos/tree/master/datetest</a></p>
+<p><i>Header photo by <a href="https://unsplash.com/@charissek?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Charisse Kenion</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

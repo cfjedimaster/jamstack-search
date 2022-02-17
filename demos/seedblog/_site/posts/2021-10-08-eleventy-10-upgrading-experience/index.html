@@ -1,0 +1,84 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Eleventy 1.0 - Upgrading Experience</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Eleventy 1.0 - Upgrading Experience</h2>
+<p>
+Written: 10/8/2021
+</p>
+
+
+<p>With <a href="https://www.11ty.dev/blog/eleventy-v1-beta/">Eleventy 1.0</a> coming soon, I thought I'd take a look at the experience of upgrading an existing implementation to the latest version. As I've warned, Eleventy 1.0 is still in beta so the details may change, but I figured it was safe to give it a try on my own site (the very place you're reading this post). Eleventy is shipping a <a href="https://github.com/11ty/eleventy-upgrade-help">tool</a> to help with that process, and I cover that a bit later, but me being who I am I just went ahead and Leroy Jenkins the process.</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/mLyOj_QD4a4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<p>After upgrading Eleventy to the 1.0 beta (<code>npm i @11ty/eleventy@beta</code>), I fired up my local copy of this site and... bam! It crashed. Luckily though the error was nice and clear:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/10/upgrade1.jpg" alt="Error about unknown filter" class="lazyload imgborder imgcenter">
+</p>
+<p>This error makes me very, <em>very</em> happy. What is it? The <a href="https://liquidjs.com/">LiquidJS</a> template language (the primary one I use for this site, but not exclusively) is a great project, but for some reason has a default behavior that I find insane. When using a filter that doesn't exist, the default behaviour is for Liquid to ignore it. So your coworker tells you to use the cat filter in certain blocks, like so:</p>
+<pre><code class="language-html">Hello {{ name | cat }}
+
+</code></pre>
+<p>But it turns out you misheard them and they meant to say <code>kitten</code> filter. By default, Liquid sees the undefined filter and just does nothing. I am sure there is a valid reason for this, and it absolutely makes sense to make being strict about this an option, but I cannot fathom why it would default to <em>not</em> being strict. Turns out, I had about 5-6 cases of a filter that wasn't defined that was just silently ignored.</p>
+<p>So in Eleventy 1.0, they simply set the <a href="https://github.com/11ty/eleventy/issues/222">default Liquid option</a> to enforce strict filters. I really like this change. It took me maybe five minutes to fix the various filters in my site that weren't working (I literally just got rid of em, I didn't need them).</p>
+<p>Woot! Ok, but then I had another problem:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/10/upgrade2.jpg" alt="illegal filename error" class="lazyload imgborder imgcenter">
+</p>
+<p>The line in question looked like so:</p>
+<pre><code class="language-html">
+{% include footer %}
+
+</code></pre>
+<p>This issue is covered in the <a href="https://www.11ty.dev/docs/languages/liquid/">Eleventy Liquid</a> docs here:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/10/upgrade3.jpg" alt="Warning about includes" class="lazyload imgborder imgcenter">
+</p>
+<p>The solution was to just add single quotes:</p>
+<pre><code class="language-html">
+{% include 'footer' %}
+
+</code></pre>
+<p>I had maybe ten of these around my site, but it was also a five minute fix or so.</p>
+<p>Ok, so at this point, I was able to get things running locally just fine. As an FYI, and I don't think it would have mattered but it's nice to know, I run Eleventy locally via the Netlify CLI and Netlify Dev, and nothing in that process seemed to intefere with Eleventy 1.0. Again, I didn't <em>expect</em> there would be an issue, but it's nice to know. At this point, I decided to look at the <a href="https://github.com/11ty/eleventy-upgrade-help">helper plugin</a>.</p>
+<p>First off, I was a bit surprised the 'helper' was a plugin, as I would have imagined some kind of local script you run that looks at your code, but running in context with your site itself as a plugin makes sense too. As a regular Eleventy plugin, you simply install it and then add support to your <code>.eleventy.js</code>. While I don't think it matters if I keep it around forever, I added some helpful comments like so:</p>
+<pre><code class="language-js">// remove me
+const UpgradeHelper = require(&quot;@11ty/eleventy-upgrade-help&quot;);
+
+// later in my file
+
+//remove me
+eleventyConfig.addPlugin(UpgradeHelper);
+</code></pre>
+<p>I guarantee you I'm going to forget and look into removing it sometime around Eleventy 2.0. The plugin fdocuses on a few particular items. While you can get details at the <a href="https://github.com/11ty/eleventy-upgrade-help">docs</a>, it checks for:</p>
+<ul>
+<li>Use of the slug filter that should now be slugify.</li>
+<li>Warnings about deep data merge not being turned on.</li>
+<li>Liquid changes (would have helped me with the stuff above!)</li>
+<li>And a change to non-root .gitignore stuff (doesn't apply to me)</li>
+</ul>
+<p>When I ran Eleventy, I saw this (switching from screenshots to a text copy so it's hopefully easy to read):</p>
+<pre><code class="language-bash">[@11ty/eleventy-upgrade-help] PASSED `slug` to `slugify` filter
+[@11ty/eleventy-upgrade-help] WARNING eleventyConfig.setDataDeepMerge(true) is the new 1.0 default. Revert with eleventyConfig.setDataDeepMerge(false);
+[@11ty/eleventy-upgrade-help] WARNING The liquidjs `strictFilters` option default (in Eleventy) changed from false to true. Revert with `eleventyConfig.setLiquidOptions({ strictFilters: false })`.
+[@11ty/eleventy-upgrade-help] WARNING The liquidjs `dynamicPartials` option default changed from false to true. Functionally this means `include` statements require quotes now. Revert with `eleventyConfig.setLiquidOptions({ dynamicPartials: false })`.
+[@11ty/eleventy-upgrade-help] PASSED input directory .gitignore check
+</code></pre>
+<p>Nice, simple, and direct. You can tweak what the plugin checks if you want, but I'd probably leave it at the default.</p>
+<p>For now, I'm not running the 1.0 changes in production, just locally. As this site is a blog that's pretty easy to do - I only commit my new posts. With me assuming we'll have a formal 1.0 release on the 11th, I'll wait till then, test again, and commit. Enjoy!</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

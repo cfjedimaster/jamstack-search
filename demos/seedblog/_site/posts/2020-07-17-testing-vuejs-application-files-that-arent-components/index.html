@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Testing Vue.js Application Files That Aren't Components</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Testing Vue.js Application Files That Aren't Components</h2>
+<p>
+Written: 7/16/2020
+</p>
+
+
+<p>Ok, before I begin, a <em>huge</em> disclaimer. My confidence on this particular tip is hovering around 5% or so. Alright, so some context. I'm working on a game in Vue.js. Surprise surprise. It probably won't ever finish, but I'm having some fun building small parts of it here and there. The game is an RPG and one of the first things I built was a basic dice rolling utility.</p>
+<p>In my Vue application, I created a <code>utils</code> folder and made a file <code>dice.js</code>. I used this setup because I wasn't building a component, but rather a utility that my Vue components could load and use. My dice utility takes strings like this - <code>2d6</code> - which translate to &quot;roll a six sided die 2 times&quot;. It even supports <code>2d6+2</code> which means to &quot;roll a six sided die 2 times and 2 to the final result&quot;. It's rather simple string parsing, but here's the entirety of it:</p>
+<pre><code class="language-js">export const dice = {
+
+	roll(style) {
+		let bonus=0, total=0;
+		if(style.indexOf('+') &gt; -1) {
+			[style, bonus] = style.split('+');
+		} 
+		
+		let [rolls, sided] = style.split('d');
+		
+		//console.log(rolls, sided);
+		for(let i=0;i&lt;rolls;i++) {
+			total += getRandomIntInclusive(1, sided);
+		}
+		total += parseInt(bonus);
+		return total;
+	}
+}
+
+function getRandomIntInclusive(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min; //The maximum is inclusive and the minimum is inclusive 
+}
+</code></pre>
+<p>In one of my Vue components, I use it like so:</p>
+<pre><code class="language-js">import { dice } from '@/utils/dice';
+
+export default {
+	data() {
+		return {
+			newName:'gorf',
+			str: '',
+			dex: '',
+			int: ''
+		}
+	}, 
+	created() {
+		this.reroll();
+	},
+	computed: {
+		cantContinue() {
+			return this.newName == ''
+		}
+	},
+	methods: {
+		reroll() {
+			this.str = dice.roll('3d6');
+			this.dex = dice.roll('3d6');
+			this.int = dice.roll('3d6');
+		},
+		start() {
+			this.$store.commit('player/setName', this.newName);
+			this.$store.commit('player/setStats', { str: this.str, dex: this.dex, int: this.int });
+			this.$router.replace('game');
+		}
+	}
+}
+</code></pre>
+<p>I import the dice code and then can make calls to it for my UI. Nothing too crazy here, but I ran into an interesting issue today. My initial version of <code>dice.js</code> didn't support the &quot;+X&quot; syntax. I wanted to add it, but also wanted a quick way to test it.</p>
+<p>So I could have simply gone into my Vue component and add some random tests to the <code>created</code> block, something like:</p>
+<pre><code class="language-js">console.log(dice.roll('2d6+2'));
+</code></pre>
+<p>And that would work, but as I developed, I'd have to wait for Vue to recompile and reload my page. In general that's pretty speedy, but what I really wanted to do was write a quick Node script and run some tests at the CLI. To be clear, not unit tests, just literally a bunch of console logs and such. That may be lame, but I thought it might be quick and simple.</p>
+<p>However... it wasn't. If you look back at the source of dice.js, you'll see it's <em>not</em> using <code>module.exports</code> but just a regular export.  This was my test:</p>
+<pre><code class="language-js">import { dice } from '../src/utils/dice'
+
+// just some random rolls
+for(let i=1;i&lt;4;i++) {
+	for(let k=3;k&lt;10;k++) {
+		let arg = i+'d'+k;
+		console.log('input = '+arg, dice.roll(arg));
+	}
+}
+
+console.log(dice.roll('2d6+2'));
+</code></pre>
+<p>And this was the result:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/07/vrpg1.jpg" alt="Error output from script" class="lazyload imgborder imgcenter">
+</p>
+<p>Ok, so an admission. I'm still a bit hazy on the whole module thing in Node, and JavaScript in general. I've used require, imports, exports, but I wouldn't pass a technical interview question on them. I hope you don't think less of me. Honestly.</p>
+<p>That being said, the error kinda made sense, but I didn't want to use the <code>.mjs</code> extension because I didn't know if that would break what the Vue CLI does.</p>
+<p>I was about to give up and was actually considering adding a route to my Vue application just for debugging.</p>
+<p>Thankfully, StackOverflow came to the rescue. I found <a href="https://stackoverflow.com/a/54090097/52160">this solution</a> which simply required me adding <code>esm</code> and then running my code like so: <code>node -r esm testDice.js</code>.  It worked perfectly! And because my memory is crap, I added this to the top of the file:</p>
+<pre><code class="language-js">/*
+Ray, run with: node -r esm test.js
+*/
+</code></pre>
+<p>Yes, I write notes to myself in comments. You do too, right?</p>
+<p>Anyway, I hope this helps others, and I'm more than willing to be &quot;schooled&quot; about how this could be done better. Just leave me a comment below!</p>
+<p><span>Photo by <a href="https://unsplash.com/@seven_77?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Nancy Yang</a> on <a href="https://unsplash.com/s/photos/cats-sleeping?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

@@ -1,0 +1,119 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Page Level URL Fetching with Eleventy</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Page Level URL Fetching with Eleventy</h2>
+<p>
+Written: 7/30/2021
+</p>
+
+
+<p>Let me begin by being very clear. This is not a very good idea. I just got back from a much delayed honeymoon with my wife (apparently right before the mask mandates all come crashing back) and haven't written code for a while so perhaps I was a bit desperate to create something useless. That being said, working on this did let me kick the tires a bit on a few Eleventy things and that's <em>always</em> a good idea.</p>
+<p>So - the background for this was a recently released article on Astro over on css-tricks: <a href="https://css-tricks.com/a-look-at-building-with-astro/">&quot;A Look at Building with Astro
+&quot;</a>. It was an interesting article and I'm hoping to get some time to play with Astro more later in the year, but one aspect in particular stood out to me.</p>
+<p>Astro supports loading remote data via front matter. Here's an example from the article:</p>
+<pre><code>---
+import Card from '../components/Card.astro';
+import Header from '../components/Header';
+
+const remoteData = await fetch('https://css-tricks.com/wp-json/wp/v2/posts?per_page=12&amp;_embed').then(response =&gt; response.json());
+---
+</code></pre>
+<p>This then lets you use <code>remoteData</code> as page level data represented by the network call used. Now... I see that and it's like I have two immediate responses... &quot;that's cool&quot; and &quot;I'm not sure I like that&quot;. That's a fairly typical response I think. Not every feature that looks good on a first impression is actually a sensible idea. But seeing that got me thinking about how something like that could be done in Eleventy.</p>
+<p>Right now, you could easily fetch data and use it in your pages using either global or page level data files. So if I didn't want to add to the &quot;global&quot; data variable space in Eleventy, I could do something like so:</p>
+<pre><code class="language-js">const fetch = require('node-fetch');
+
+module.exports = async () =&gt; {
+
+	let data = await fetch('https://swapi.dev/api/starships');
+	let json = (await data.json()).results;
+
+	return { ships: json }
+
+}
+</code></pre>
+<p>If I name this <code>foo.11tydata.js</code> and place it in the same folder as <code>foo.liquid</code> (or any other template), then my page would have access to a <code>ships</code> value.</p>
+<p>This is what I'd do.</p>
+<p>But again - I wanted to see if I could get it working <em>just</em> on the page itself.</p>
+<p>For my first attempt, I tried to use <a href="https://www.11ty.dev/docs/data-frontmatter/#javascript-front-matter">JavaScript front matter</a>, this let's you define functions in your front matter that your template can use. Here's the example from the doc I just linked to:</p>
+<pre><code class="language-html">---js
+{
+  title: &quot;My page title&quot;,
+  currentDate: function() {
+    // You can have a JavaScript function here!
+    return (new Date()).toLocaleString();
+  }
+}
+---
+&lt;!doctype html&gt;
+&lt;html&gt;
+&lt;!-- … --&gt;
+&lt;body&gt;
+  
+  &lt;h1&gt;{{ title }}&lt;/h1&gt;
+  &lt;p&gt;Published on {{ currentDate() }}&lt;/p&gt;
+  
+</code></pre>
+<p>But, as the docs point out, you can't use <code>{{ currentDate() }}</code> in Liquid. However, you can use an IIFE if you want:</p>
+<pre><code class="language-html">---js
+{
+  title: &quot;My page title&quot;,
+  currentDate: (function() {
+    // You can have a JavaScript function here!
+    return (new Date()).toLocaleString();
+  }
+})()
+---
+&lt;!doctype html&gt;
+&lt;html&gt;
+&lt;!-- … --&gt;
+&lt;body&gt;
+
+&lt;h1&gt;{{ title }}&lt;/h1&gt;
+&lt;p&gt;Published on {{ currentDate }}&lt;/p&gt;
+
+</code></pre>
+<p>Which is fine if you want it executed one time only when the page is being built. However, you can't do things like <code>const fetch = require('node-fetch');</code> in there - I tried.</p>
+<p>But then I tried another tact... shortcodes. I wrote a filter that let's you pass a URL and a variable. The filter will call the URL and return the results in the variable you created. Here's an example:</p>
+<pre><code class="language-html">
+{% fetch 'https://swapi.dev/api/starships' 'ships3' %}
+{% for ship in page.ships3.results %}
+    ship test, {{ ship.name }}&lt;br/&gt;
+{% endfor %}
+
+</code></pre>
+<p>And here's the filter:</p>
+<pre><code class="language-js">eleventyConfig.addShortcode(&quot;fetch&quot;, async function(url, name, filter) {
+    let resp = await fetch(url);
+    let data = await resp.json();
+    if(filter) data = data[filter];
+    this.page[name] = data;
+});
+</code></pre>
+<p>All it does it take the URL you sent, request it, and return it. Shortcodes have access to page level data so I use the second argument as a way to name the place to store the value. Finally, a lot of APIs will return top level meta or page data and then results, so I included a <code>filter</code> argument as a quick way to get just what you want:</p>
+<pre><code class="language-html">
+{% fetch 'https://swapi.dev/api/starships' 'ships4' 'results' %}
+{% for ship in page.ships4 %}
+    ship test, {{ ship.name }}&lt;br/&gt;
+{% endfor %}
+
+</code></pre>
+<p>So um... yeah. That works... I just don't think I'd ever actually do that. ;) I can say the idea of a shortcode creating data you can use again is interesting so I'd love to hear if folks have more... sensible ways to make use of this. Let me know!</p>
+<p>Photo by <a href="https://unsplash.com/@bendavisual?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Benjamin Davies</a> on <a href="https://unsplash.com/s/photos/dangerous?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

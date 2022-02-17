@@ -1,0 +1,53 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Running Netlify Dev and Eleventy Two or More Times At Once</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Running Netlify Dev and Eleventy Two or More Times At Once</h2>
+<p>
+Written: 12/10/2021
+</p>
+
+
+<p>Ok, so this falls into the category of something probably few people will run into, but since I did, I've got to blog it. If only to save myself when I inevitably forget six months from now. Also, all credit for this solution comes from Netlify support engineer [Hrishikesh Kokate](Hrishikesh Kokate). Alright, so what's the issue?</p>
+<p>I use <a href="https://www.11ty.dev/">Eleventy</a> for this blog and host on <a href="https://www.netlify.com/">Netlify</a>. Netlify's <a href="https://docs.netlify.com/cli/get-started/">CLI</a> has a great feature that lets you mimic the Netlify production experience in your local environment. You go into your project and run <code>netlify dev</code> and you're - usually - good to go. Obviously, you sometimes need to configure things a bit. So, for example, this is how I run this blog locally:</p>
+<pre><code>netlify dev -c &quot;eleventy --serve --quiet&quot;
+</code></pre>
+<p>The <code>-c</code> command tells Netlify's CLI what command to use to run my static site generator. This will run Eleventy and then fire up Netlify's local development server as well. The end result is actually two servers running. You can see that in the screenshot below:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2021/12/ntl.jpg" alt="Terminal output from starting up Netlify dev and Eleventy" class="lazyload imgborder imgcenter">
+</p>
+<p>As I said, I run my blog on Eleventy, and I also build a bunch of dumb demos with Eleventy, so I write a lot of <a href="https://www.raymondcamden.com/tags/eleventy">silly blog posts</a> on it as well. Seriously, I probably need to stop at some point. Anyway, sometimes I need to run my blog locally while I write a post <em>and</em> run an instance of Eleventy for a demo.</p>
+<p>This past week, I just so happened to try to run my blog <em>and</em> an Eleventy demo that needed to run via <code>netlify dev</code> as well. I was concerned about the ports. The Netlify CLI will automatically recognize when its normal port is taken and simply select a new one. I wasn't sure what Eleventy would do. To be safe, in my second demo, I did this:</p>
+<pre><code>netlify dev -p 9999 -c &quot;npx eleventy --serve --port 9998&quot;
+</code></pre>
+<p>Basically, use a unique port for both parts of the second demo. While nothing looked amiss in the terminal output, when my second site opened up, it was showing the content for my blog. I could manually go to port 9998 and see the second Eleventy site, but I needed the &quot;context&quot; of Netlify Dev as I was using its Functions feature.</p>
+<p>So I posted on the <a href="https://answers.netlify.com/t/two-instances-of-ntl-dev/48287">forums</a> and this is where Hrishikesh saved the day. To get it working right, edit the <code>[dev]</code> block of the netlify.toml file:</p>
+<pre><code>[dev]
+  framework = &quot;#custom&quot;
+  targetPort = 9998
+</code></pre>
+<p>Honestly, I'm not 100% sure why this worked, but it did. One quick note - I wanted to stop using <code>-c</code> at the command line in the second instance as I was now using netlify.toml to specify stuff, so I modified it like so:</p>
+<pre><code>[dev]
+  command = &quot;eleventy --serve&quot;
+  framework = &quot;#custom&quot;
+  targetPort = 9_998
+</code></pre>
+<p>Anyway, as I said, this will probably impact two of you, one is me in six months (hi me, you rock, no matter how much weight you lost or gained!), so thanks for reading!</p>
+<p>Photo by <a href="https://unsplash.com/@ronan18?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Ronan Furuta</a> on <a href="https://unsplash.com/s/photos/ports?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

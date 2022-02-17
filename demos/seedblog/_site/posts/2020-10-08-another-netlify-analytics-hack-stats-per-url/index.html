@@ -1,0 +1,300 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Another Netlify Analytics Hack - Stats Per URL</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Another Netlify Analytics Hack - Stats Per URL</h2>
+<p>
+Written: 10/7/2020
+</p>
+
+
+<p>I've blogged a few times on the Netlify Analytics API (<a href="https://www.raymondcamden.com/2019/10/05/building-a-netlify-stats-viewer-in-vuejs">&quot;Building a Netlify Stats Viewer in Vue.js&quot;</a>) and <a href="https://www.raymondcamden.com/2020/05/18/integrating-netlify-analytics-and-eleventy">&quot;Integrating Netlify Analytics and Eleventy&quot;</a>) and today I've got some more code to share. Now - every time I do this - I remind folks that there is <em>not</em> a published doc for the Netlify Analytics API. That is still the case. Today I'll also add that what I'm sharing is <em>very</em> rough. It worked for me and it's up on GitHub (<a href="https://github.com/cfjedimaster/netlify-analytics-api">repo</a>), but just keep in mind that I wrote this as a tool for myself. If it can help you too, great!</p>
+<p>For a while now I've wished I had a way to get analytics about a particular blog post. Netlify's analytics for page views are all date-based. I can easily tell what pages were viewed over a time period. But what I really wanted was the ability to see page views for a post over <em>all</em> time.</p>
+<p>I decided to take a crack at it with some Node.js scripts. Why Note and not a client-side application? In order to get my stats, I'd need access to <em>all</em> of my data. Technically not everything for a recent blog post, but if I wanted to search more generically, like <code>/2020</code> to see page views for my content this year, I'd need analytics from the beginning of the year. Therefore I took this approach:</p>
+<ol>
+<li>First, I wrote a script that gets data for one specific data. It stores this in a folder.</li>
+<li>I wrote a script that takes the saved data from a cache and creates one array of URL and view counts.</li>
+<li>I built a Vue app that sucks in the resulting JSON and let's me do a quick filter.</li>
+</ol>
+<p>Let's take a look at these - and again - remember this is rough code. Let's call it - organic, farm fed, all-natural code. First up is <code>get.js</code>, which, as you can guess, sucks in data.</p>
+<pre><code class="language-js">require('dotenv').config();
+const fetch = require('node-fetch');
+const fs = require('fs');
+
+const token = process.env.NETLIFY_TOKEN;
+const siteId = process.env.NETLIFY_SITEID;
+
+// Earliest will be documented
+let earliest = new Date(2019,10,1);
+
+/*
+to do, determine START DATE
+look at cache and see what's done
+do last+1 day + X more, probably 10
+*/
+
+/*
+let begin = new Date(2019,10,1);
+let end = new Date(begin);
+end.setDate(begin.getDate() + 1);
+console.log(begin, end);
+*/
+async function getForDay(from, siteId, token) {
+	
+	let to = new Date(from);
+	to.setDate(from.getDate()+1);
+
+	let url = `https://analytics.services.netlify.com/v1/${siteId}/pages?from=${from.getTime()}&amp;to=${to.getTime()}&amp;timezone=-0500&amp;limit=99999`;
+	
+	let result = await fetch(url, {
+		headers: {
+			'Authorization':`Bearer ${token}`
+		}
+	});
+	return (await result.json()).data;
+
+}
+
+/*
+I look at my cache folder and see which files exist. Each file is
+YYYY-MM-DD.json
+and from this, I can figure out my most recent time
+*/
+function getLastCacheDate() {
+	let files = fs.readdirSync('./cache');
+	if(files.length === 0) return;
+	let latest = new Date(1980,0,1);
+	files.forEach(f =&gt; {
+		let d = f.split('.')[0];
+		let [y,m,dom] = d.split('-');
+		let date = new Date(y, m-1, dom);
+		if(date.getTime() &gt; latest.getTime()) {
+			latest = date;
+		}
+	});
+	return latest;
+}
+
+(async () =&gt; {
+	for(let i=0;i&lt;1;i++) {
+		let latest = getLastCacheDate();
+		let begin = earliest;
+		if(latest) {
+			begin = new Date(latest);
+			begin.setDate(latest.getDate()+1);
+		} 
+
+		console.log('Fetch for '+begin);
+		let data = await getForDay(begin, siteId, token);
+		console.log(`Data loaded, ${data.length} items`);
+		let fileName = `./cache/${begin.getFullYear()}-${(begin.getMonth()+1)}-${begin.getDate()}.json`;
+		fs.writeFileSync(fileName, JSON.stringify(data), 'utf-8');
+		console.log(`${fileName} written.`);
+	}
+})();
+</code></pre>
+<p>From the top, I begin by using two env variables. The token is a personal access token as I described in my <a href="https://www.raymondcamden.com/2020/05/18/integrating-netlify-analytics-and-eleventy">last post</a>. The site ID represents my blog, where you are right now. This part:</p>
+<pre><code class="language-js">// Earliest will be documented
+let earliest = new Date(2019,10,1);
+</code></pre>
+<p>Comes from the fact that the analytics API returns data about how long it's been generating logs:</p>
+<pre><code class="language-js">ingestion: {
+    status: 'current',
+    ingestion_start: 1575158400000,
+    ingestion_end: 1602014400000
+}
+</code></pre>
+<p>I converted <code>ingestion_start</code> to a date to get what you see in earliest. You could pick any date really. The <code>getForDay</code> function handles actually hitting the API and that's actually the simplest part of this whole script.</p>
+<p>If you scroll down into the main block, you'll first see an odd loop, from 0 to 1. Once I got my code working, I was sucking down 25 days at a time. I felt like that was safe and not abusive to Netlify's API. However, I never wrote code to &quot;stop&quot; at the current day. So as I got close to October 6th (the last time I played with this I believe), I simply reduced the counter by hand. Hack.</p>
+<p>Next, <code>getLastCacheDate</code> looks at my cache folder to figure out when I last ran the code. My cache files are named YYYY-MM-DD to make it easier to work with dates, but I still screwed this up a few times. I'm actually running this in the loop which is a bit wasteful, but I'm ok with that.</p>
+<p>Finally, I take the resulting data and just store it. The results look like this:</p>
+<pre><code class="language-js">[
+	{
+		&quot;path&quot;: &quot;/2015/05/17/a-simple-cordova-task-runner-for-visual-studio-code/&quot;,
+		&quot;count&quot;: 4
+	},
+	{
+		&quot;path&quot;: &quot;/2006/03/30/Soundings-ColdFusion-Survey-Update-151&quot;,
+		&quot;count&quot;: 4
+	},
+	{
+		&quot;path&quot;: &quot;/2004/11/15/3D322D18-EEB5-E4F3-C9B08B0042A17015&quot;,
+		&quot;count&quot;: 4
+	},
+	{
+		&quot;path&quot;: &quot;/2017/03/23/check-out-paveai-for-analytics/&quot;,
+		&quot;count&quot;: 4
+	},
+	// LOTS MORE ROWS!
+]
+</code></pre>
+<p>My next script, <code>read.js</code>, handles combining these files:</p>
+<pre><code class="language-js">const fs = require('fs');
+
+let files = fs.readdirSync('./cache');
+let fileData = {};
+
+files.forEach(f =&gt; {
+	let data = JSON.parse(fs.readFileSync('./cache/'+f, 'UTF-8'));
+	data.forEach(i =&gt; {
+		if(!fileData[i.path]) fileData[i.path]=0;
+		fileData[i.path] += parseInt(i.count,10);
+	});
+});
+
+let keys = Object.keys(fileData);
+keys = keys.sort((a,b) =&gt; {
+	if(fileData[a] &lt; fileData[b]) return 1;
+	if(fileData[a] &gt; fileData[b]) return -1;
+	return 0;
+});
+
+
+let sorted = [];
+
+keys.forEach(k =&gt; {
+	sorted.push({path:k, views:fileData[k]});
+	//console.log(k.padEnd(80)+' '+fileData[k]);
+});
+console.log(JSON.stringify(sorted));
+</code></pre>
+<p>I read them all, create one big array, sort it such that the highest viewed pages are on top, and then output it. Here's another snippet:</p>
+<pre><code class="language-js">[
+	{
+		&quot;path&quot;: &quot;/&quot;,
+		&quot;views&quot;: 68778
+	},
+	{
+		&quot;path&quot;: &quot;/recentPosts/&quot;,
+		&quot;views&quot;: 46738
+	},
+	{
+		&quot;path&quot;: &quot;/2016/09/28/some-quick-nativescript-tips/&quot;,
+		&quot;views&quot;: 44004
+	},
+	{
+		&quot;path&quot;: &quot;/2017/06/29/handling-sms-with-openwhisk-ibm-watson-and-twilio/&quot;,
+		&quot;views&quot;: 37420
+	},
+	{
+		&quot;path&quot;: &quot;/2017/07/07/handling-sms-with-openwhisk-ibm-watson-and-twilio-an-update/&quot;,
+		&quot;views&quot;: 26174
+	},
+	{
+		&quot;path&quot;: &quot;/2018/02/08/building-table-sorting-and-pagination-in-vuejs&quot;,
+		&quot;views&quot;: 6219
+	},
+	{
+		&quot;path&quot;: &quot;/2019/05/01/handling-errors-in-vuejs&quot;,
+		&quot;views&quot;: 3015
+	},
+	{
+		&quot;path&quot;: &quot;/olddemos&quot;,
+		&quot;views&quot;: 2769
+	},
+	{
+		&quot;path&quot;: &quot;/2019/08/08/drag-and-drop-file-upload-in-vuejs&quot;,
+		&quot;views&quot;: 2685
+	},
+	{
+		&quot;path&quot;: &quot;/2020/09/04/vue-quick-shot-fullscreen-api&quot;,
+		&quot;views&quot;: 2499
+	},
+	//LOTS MORE ROWS!
+]
+</code></pre>
+<p>To be honest, I was really surprised to see NativeScript as my number one post. It's also incredibly depressing to see how many pages get just around a hundred views of so. Of course, my blog was up for a roughly 16 years before I enabled Netlify Analytics so I'm going to worry most about my most recent content.</p>
+<p>I ran <code>read.js</code> and saved the output to <code>output.json</code>. I then built this horribly simple Vue app:</p>
+<pre><code class="language-html">&lt;html&gt;
+&lt;head&gt;
+&lt;style&gt;
+input {
+	width:400px;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+
+&lt;div id=&quot;app&quot;&gt;
+	&lt;input v-model=&quot;search&quot; type=&quot;search&quot; placeholder=&quot;Enter a search term here (3 char min)&quot;&gt;
+	&lt;span v-if=&quot;results&quot;&gt;Total for this search: &lt;/span&gt;
+	&lt;table v-if=&quot;results&quot;&gt;
+		&lt;thead&gt;
+			&lt;tr&gt;
+				&lt;th&gt;Path&lt;/th&gt;
+				&lt;th&gt;Views&lt;/th&gt;
+			&lt;/tr&gt;
+		&lt;/thead&gt;
+		&lt;tr v-for=&quot;result in results&quot;&gt;
+			&lt;td&gt;&lt;/td&gt;
+			&lt;td&gt;&lt;/td&gt;
+		&lt;/tr&gt;
+	&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://cdn.jsdelivr.net/npm/vue/dist/vue.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+const app = new Vue({
+	el:'#app',
+	data:{
+		data:null,
+		search:''
+	},
+	async created() {
+		let resp = await fetch('./output.json');
+		console.log('test');
+		try {
+			this.data = await resp.json();
+		} catch(e) {
+			console.log('wtf');
+			console.error(e);
+		}
+	},
+	computed: {
+		results() {
+			if(this.search.length &lt; 3 || !this.data) return;
+			return this.data.filter(d =&gt; {
+				return d.path.indexOf(this.search) &gt;= 0;
+			});
+		},
+		total() {
+			if(!this.results || this.results.length === 0) return 0;
+			return this.results.reduce((prev,curr) =&gt; {
+				return prev + curr.views;
+			}, 0);
+		}
+	}
+});
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Which basically has a form field on top and a table of results:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/10/a1.jpg" alt="Table of results" class="lazyload imgborder imgcenter">
+</p>
+<p>64K page views on my vue content is pretty nice. I can also search by year since my pages follow a date based path system:</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/10/a2.jpg" alt="Using /2020 as the path" class="lazyload imgborder imgcenter">
+</p>
+<p>Not bad for a year that is totally insane and hellish, right?</p>
+<p>And that's it. Again, you can grab the code at the <a href="https://github.com/cfjedimaster/netlify-analytics-api">repo</a> if you wish and if folks have some ideas for improvements, I'm all ears. For now my plan is to update my cache every now and then, take a look, and carry on writing blog posts a few people read. :)</p>
+<p><span>Photo by <a href="https://unsplash.com/@mrthetrain?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Joshua Hoehne</a> on <a href="https://unsplash.com/s/photos/cache?utm_source=unsplash&amp;utm_medium=referral&amp;utm_content=creditCopyText">Unsplash</a></span></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

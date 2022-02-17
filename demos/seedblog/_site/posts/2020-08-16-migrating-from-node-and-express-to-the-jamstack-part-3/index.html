@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Migrating from Node and Express to the Jamstack - Part 3</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Migrating from Node and Express to the Jamstack - Part 3</h2>
+<p>
+Written: 8/15/2020
+</p>
+
+
+<p>Ok, so I know I just posted <a href="https://www.raymondcamden.com/2020/08/15/migrating-from-node-and-express-to-the-jamstack-part-2">part two</a> yesterday (and don't forget to check out <a href="https://www.raymondcamden.com/2020/08/06/migrating-from-node-and-express-to-the-jamstack-part-1">part one</a>) but I was feeling inspired this morning so I made a bit more progress. Also, I forgot something I wanted to cover in yesterday's post and I didn't want more time to pass without me talking about. Let's get started!</p>
+<h3>Recognizing Login State</h3>
+<p>In yesterday's post I described how to add the login and logut functionality to the Jamstack. What I forgot to mention was how I'd recognize your current login state on page load. Inside the same method I wrote that fires on <code>DOMContentLoaded</code> and initializes <code>netlifyIndentity</code>, I have this block:</p>
+<pre><code class="language-js">user = netlifyIdentity.currentUser();
+
+if(user) {
+	loginBtn.classList.add('d-none');
+	logoutBtn.classList.remove('d-none');
+}
+</code></pre>
+<p>Basically, if there's a current user, hide the login button and reveal the logout button. What does <code>user</code> look like?</p>
+<pre><code class="language-js">{
+	&quot;api&quot;: {
+		&quot;apiURL&quot;: &quot;/.netlify/identity&quot;,
+		&quot;_sameOrigin&quot;: true,
+		&quot;defaultHeaders&quot;: {
+			&quot;X-Use-Cookie&quot;: &quot;1&quot;
+		}
+	},
+	&quot;url&quot;: &quot;/.netlify/identity&quot;,
+	&quot;token&quot;: {
+		&quot;access_token&quot;: &quot;long token here&quot;,
+		&quot;expires_in&quot;: &quot;3600&quot;,
+		&quot;refresh_token&quot;: &quot;short token here&quot;,
+		&quot;token_type&quot;: &quot;bearer&quot;,
+		&quot;expires_at&quot;: 1597606688000
+	},
+	&quot;id&quot;: &quot;1f4331df-61e3-4cd8-a1ee-46d57b6d97ca&quot;,
+	&quot;aud&quot;: &quot;&quot;,
+	&quot;role&quot;: &quot;&quot;,
+	&quot;email&quot;: &quot;raymondcamden@gmail.com&quot;,
+	&quot;confirmed_at&quot;: &quot;2020-08-14T14:30:44Z&quot;,
+	&quot;app_metadata&quot;: {
+		&quot;provider&quot;: &quot;google&quot;
+	},
+	&quot;user_metadata&quot;: {
+		&quot;avatar_url&quot;: &quot;https://lh3.googleusercontent.com/a-/AOh14GiKTiig0ZyRUyhy6GGRJU5-Q2ubQmOPJWSUSueGiTQ&quot;,
+		&quot;full_name&quot;: &quot;Raymond Camden&quot;
+	},
+	&quot;created_at&quot;: &quot;2020-08-14T14:30:43Z&quot;,
+	&quot;updated_at&quot;: &quot;2020-08-14T14:30:43Z&quot;,
+	&quot;_fromStorage&quot;: true
+}
+</code></pre>
+<p>Notice the <code>_fromStorage</code> bit? You can see this information stored in LocalStorage if you open up your devtools.</p>
+<p>This works really well, but you may notice a &quot;flicker&quot; in the UI of the login button switching to the logout one. I think it would be better to hide both buttons and only enable the proper one. My demo site definitely has some less than optimal design choices but as it's not really my focus for this series, I'm ok with it. Just keep in mind that the fault is mine, not Netlify's.</p>
+<h3>Secured Serverless Functions</h3>
+<p>The first new feature in this series is the addition of a serverless function to post comments. Netlify does a good job of documenting this here: <a href="https://docs.netlify.com/functions/functions-and-identity">Functions and Identity</a>. I designed a serverless function that would accept two paremeters - the ID of the film being commented on and the comment text. I didn't pass the user information as Netlify provides that for me.</p>
+<pre><code class="language-js">const MongoClient = require('mongodb').MongoClient;
+const url = process.env.MONGO_URL;
+
+exports.handler = async (event, context) =&gt; {
+
+  const {identity, user} = context.clientContext;
+
+  if(!user) {
+    return {
+      statusCode: 500,
+      body:'Unauthenticated call to function.'
+    }
+  };
+
+  const comment = JSON.parse(event.body);
+
+  try {
+
+  	const client = new MongoClient(url, { useUnifiedTopology: true });
+  	await client.connect();
+  	const db = client.db('eleventy_demo');
+  	const comments = db.collection('comments');
+
+    let commentOb = {
+      text: comment.text, 
+      film: comment.film, 
+      user: {
+        email: user.email, 
+        name: user.user_metadata.full_name
+      },
+      posted: new Date()
+    }
+
+    let r = await comments.insertOne(commentOb);
+    await client.close();
+
+    return {
+      statusCode: 204
+    }
+  } catch (err) {
+    return { statusCode: 500, body: err.toString() }
+  }
+}
+</code></pre>
+<p>I pretty much just used the sample code they provided and then added the Mongo code to record a new comment. If you remember in the last post I had some concern about how I was going to &quot;connect&quot; users to comments. I took an easy route out. I have access to the email and name of the user and just stored it in the comment. In theory, a user associated with an email address may change their name, but I figure that's unlikely. I could handle that in a &quot;user profile system&quot; if I wanted to build one and handle updating related content then.</p>
+<p>The function to get comments doesn't require security and is much simpler:</p>
+<pre><code class="language-js">const MongoClient = require('mongodb').MongoClient;
+const url = process.env.MONGO_URL;
+
+
+exports.handler = async (event, context) =&gt; {
+  let film = event.queryStringParameters.film;
+  if(!film) {
+    return {
+      statusCode: 500,
+      body:'Missing film id'
+    }
+  }
+
+  try {
+
+    const client = new MongoClient(url, { useUnifiedTopology: true });
+    await client.connect();
+    const db = client.db('eleventy_demo');
+    const comments = db.collection('comments');
+
+    const query = { &quot;film&quot;: film };
+    const commentArray = await comments.find(query).sort({posted:1}).toArray();
+
+    await client.close();
+    return {
+      statusCode: 200,
+      body: JSON.stringify(commentArray)
+    };
+
+
+  } catch (err) {
+    return { statusCode: 500, body: err.toString() }
+  }
+}
+</code></pre>
+<p>This is the back end work - the front end work is mainly a bunch of messy JavaScript. I didn't use Vue.js for this project as I wanted to keep things simple with so many moving parts already. Each film page now renders comments and includes a form for adding a new one.</p>
+<p>
+<img src="https://static.raymondcamden.com/images/2020/08/nla10.png" alt="Film page" class="lazyload imgborder imgcenter">
+</p>
+<p>Instead of sharing my ugly code, I'll just say that I added a form to the films page and if you are logged in, you can submit it. I've got some UI manipulation I'll skip for now, but here's how I call my serverless function in a secure manner:</p>
+<pre><code class="language-js">let resp = await fetch('/.netlify/functions/postComment', {
+	method:'post',
+	headers: {
+		'Authorization':'Bearer ' + user.token.access_token
+	},
+	body: JSON.stringify(commentOb)
+});
+</code></pre>
+<p>Basically I just use an <code>access_token</code> value from the user in my header. You can see the complete front end (and all the source code) over on the repo: <a href="https://github.com/cfjedimaster/eleventy-auth0-serverless-mongo">https://github.com/cfjedimaster/eleventy-auth0-serverless-mongo</a>. Again though keep in mind that the JavaScript isn't the most optimized, clean version.</p>
+<p>You can, if you wish, actually test this. I'm probably going to regret it, but it's live up on <a href="https://hardcore-curie-802f8f.netlify.app/">https://hardcore-curie-802f8f.netlify.app/</a>. Hit the site, login, and post a comment. Please don't curse or spam. I can clean them up with my MongoDB client but I'd rather not have to. ;)</p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>

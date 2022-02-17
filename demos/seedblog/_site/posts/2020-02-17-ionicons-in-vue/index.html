@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Ionicons in Vue.js</title>
+	<link rel="stylesheet" href="/blog.css" />
+</head>
+<body>
+
+	<main>
+	
+<h2>Ionicons in Vue.js</h2>
+<p>
+Written: 2/16/2020
+</p>
+
+
+<p>It's been a long time since I've written about <a href="https://ionicframework.com/">Ionic</a>. In general, I haven't done much in the hybrid mobile space over the past few years. I pay attention to their updates though (<a href="https://ionicframework.com/blog/announcing-ionic-5/">version 5</a> looks impressive) and noticed recently they did a <a href="https://ionicframework.com/blog/announcing-ionicons-5/">major update</a> to their <a href="https://ionicons.com/">Ionicons</a> project.</p>
+<img src="https://static.raymondcamden.com/images/2020/02/io1.png" alt="Screen shot of the Ionicon site" class="imgborder imgcenter">
+<p>I've only used Ionicons with Ionic project, and while not required, it was useful as hell to have a robust icon library to use when building mobile apps. I knew that the project could be used outside of Ionic but I hadn't actually tested it out. On a whim, I thought I'd take a quick look at what you need to do to use it in a Vue app.</p>
+<p>Spoiler - it was ridiculously easy.</p>
+<p>I started off with a Vue application on CodePen. And by &quot;application&quot;, I mean just a CodePen with the Vue script tag added. I then setup some data for testing:</p>
+<pre><code class="language-js">Vue.config.productionTip = false;
+Vue.config.devtools = false;
+
+const app = new Vue({
+  el:'#app',
+  data: {
+    drinks: [
+    	{&quot;name&quot;:&quot;Abita&quot;,&quot;type&quot;:&quot;beer&quot;},
+    	{&quot;name&quot;:&quot;Merlot&quot;,&quot;type&quot;:&quot;wine&quot;},
+    	{&quot;name&quot;:&quot;Saint Arnold&quot;,&quot;type&quot;:&quot;beer&quot;},
+    	{&quot;name&quot;:&quot;Red Something&quot;,&quot;type&quot;:&quot;wine&quot;}
+      ]
+  }
+})
+</code></pre>
+<p>I've got an array of drinks where each one has a name and type. To make things a bit simpler, the types also happen to correspond to icons supported by Ionicons.</p>
+<p>To add support, and pay attention, this is really complex, I added this script src: https://unpkg.com/ionicons@5.0.0/dist/ionicons.js.</p>
+<p>And that's it. Done. Ionicons make use of <a href="https://developer.mozilla.org/en-US/docs/Web/Web_Components">web components</a> to add in support for the icons. (For unsupported browsers, polyfills should be used. I did a quick test with IE11 and it worked fine.) Using them then is as simple as this:</p>
+<pre><code class="language-html">&lt;ion-icon name=&quot;something&quot;&gt;&lt;/ion-icon&gt;
+</code></pre>
+<p>where &quot;something&quot; refers to the icon you want to load. You may not notice it at first but the home page has a search field that lets you quickly look for a particular icon by name. The <a href="https://ionicons.com/usage">usage</a> page also details how to use variants, like filled icons versus outlined. You can even specify per platform (ios versus android) like so:</p>
+<pre><code class="language-html">&lt;ion-icon ios=&quot;heart-outline&quot; md=&quot;heart-sharp&quot;&gt;&lt;/ion-icon&gt;
+</code></pre>
+<p>My guess it that every single browser outside of Safari will use the <code>md</code> version. In my quick test on my Windows machine, Firefox used the <code>md</code> version.</p>
+<p>So given my data, I wanted to render my drinks and use the right icon based on the drink type. This is what I used.</p>
+<pre><code class="language-html">&lt;div id=&quot;app&quot; v-cloak&gt;
+  &lt;ul&gt;
+    &lt;li v-for=&quot;drink in drinks&quot;&gt;
+      {{drink.name}} &lt;ion-icon :name=&quot;drink.type&quot;&gt;&lt;/ion-icon&gt;
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/div&gt;
+</code></pre>
+<p>And here's the result:</p>
+<p class="codepen" data-height="400" data-theme-id="default" data-default-tab="js,result" data-user="cfjedimaster" data-slug-hash="GRJRYqw" style="height: 400px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px solid; margin: 1em 0; padding: 1em;" data-pen-title="Vue plus Ionic Icons">
+  <span>See the Pen <a href="https://codepen.io/cfjedimaster/pen/GRJRYqw">
+  Vue plus Ionic Icons</a> by Raymond Camden (<a href="https://codepen.io/cfjedimaster">@cfjedimaster</a>)
+  on <a href="https://codepen.io">CodePen</a>.</span>
+</p>
+<script async src="https://static.codepen.io/assets/embed/ei.js"></script>
+<p>So yeah, I love it when I decide to test something to see if it works, and it just does, and it doesn't get complex in any way whatsoever. I had not thought of Ionicons at all recently but now I'm absolutely going to use it in my Vue apps where it makes sense.</p>
+<h3>Oops, One More Thing</h3>
+<p>I had my buddy and Ionic devrel <a href="https://mhartington.io/">Mike Hartington</a> do a quick sanity check on the post. He wondered why I didn't run into the &quot;Unknown custom element&quot; issue. Turns out, I <em>had</em> run into it, just hadn't noticed. It's an warning thrown in the console, not an error, and it takes all of two seconds to fix. Basically, you tell Vue to calm down and don't worry about it like so:</p>
+<pre><code class="language-js">Vue.config.ignoredElements = ['ion-icon'];
+</code></pre>
+<p>My CodePen above has this added.</p>
+<p><i>Header photo by <a href="https://unsplash.com/@aquatium?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Harpal Singh</a> on Unsplash</i></p>
+
+
+<p>
+<a href="/">Home</a>
+</p>
+	</main>
+
+</body>
+</html>
