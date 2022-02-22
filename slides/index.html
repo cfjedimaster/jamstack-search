@@ -82,7 +82,17 @@
 				<li class="fragment">Free-ish solution</li>
 				<li class="fragment">Completely hosted by Google</li>
 				<li class="fragment">JS/HTML Snippet</li>
+				<li class="fragment">JSON API</li>
 				<li class="fragment"><a href="https://programmablesearchengine.google.com/about/" target="new">programmablesearchengine.google.com/about/</a></li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Google PSE - Usage</h2>
+				<ul>
+				<li class="fragment">Go to console (programmablesearchengine.google.com/cse/all)</li>
+				<li class="fragment">Add your site</li>
+				<li class="fragment">Copy snippet</li>
 				</ul>
 				</section>
 
@@ -97,9 +107,106 @@
 					run it and play with it<br/>
 
 
-					https://search.google.com/search-console?ut&h
+					https://search.google.com/search-console?ut&h<br/>
+					As of 2/2/2222, crap is still broken, will come back later<br/>
+					JSON API is 1k free calls per day
 					</aside>
 				</section>
+
+				<section>
+					<h2>Google PSE - Verdict</h2>
+					<ul>
+					<li class="fragment">Easy to use (when it works) 😀</li>
+					<li class="fragment">Good customization of UI, UX, data 😀</li>
+					<li class="fragment">Ads like they're going out of style 😔</li>
+					<li class="fragment">Did I mention the ads? 😔</li>
+					</ul>
+				</section>
+
+				<section>
+					<h1>Option the Second</h1>
+					<h3>Lunr</h3>
+				</section>
+
+				<section>
+				<h2>Lunr</h2>
+				<ul>
+				<li class="fragment">Free and Open Source</li>
+				<li class="fragment">Client-side JavaScript library</li>
+				<li class="fragment"><a href="https://lunrjs.com/" target="new">lunrjs.com/</a></li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Lunr - Usage</h2>
+				<ul>
+				<li class="fragment">Add the script tag</li>
+				<li class="fragment">Create your index</li>
+				<li class="fragment">Write your search code</li>
+				</ul>
+				</section>
+
+				<section>
+					<h1>Demo</h1>
+					<aside class="notes">
+					Show lunr_index.liquid, explain why you picked what you did, explain filters<br/>
+					Show front end code, show how results dont have data, have score<br/>
+					</aside>
+				</section>
+
+				<section>
+				<h2>Lunr - Details</h2>
+				<ul>
+				<li class="fragment">First it splits strings into words</li>
+				<li class="fragment">Then it stems (seaching/seached/searchable => search)</li>
+				<li class="fragment">Results metadata can tell you *where* a match was (by default, key, optionally position)</li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Lunr - More Details</h2>
+				<ul>
+				<li class="fragment">"cat dog" - matches either, but will rank both higher</li>
+				<li class="fragment">"+cat +dog" - both must appear</li>
+				<li class="fragment">"cat*" and "*cat" - match any after and before</li>
+				<li class="fragment">"c*t" - match anything in the middle</li>
+				<li class="fragment">"title:foo" - match a specific field</li>
+				<li class="fragment">"title:foo cats"</li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Lunr - Even More Details</h2>
+				<ul>
+				<li class="fragment">Boost: One term (or multiple) is more important</li>
+				<li class="fragment">"cat^10 dog" cat is ten times more important</li>
+				<li class="fragment">"cat^10 dog^5 something else"</li>
+				<li class="fragment">"title:foo" - match a specific field</li>
+				<li class="fragment">"title:foo cats"</li>
+				<li class="fragment">Fuzzy: "foo~1" - lets you change N letters for a match</li>
+				</ul>
+				</section>
+
+				<section>
+				<h2>Lunr - Pre-Built Indexes</h2>
+				<ul>
+				<li class="fragment">Make your index, JSON it, save it</li>
+				<li class="fragment">Load it: <code>idx = lunr.Index.load(json)</code></li>
+				<li class="fragment">Remember - your index doesn't store the doc</li>
+				</ul>
+				</section>
+
+				<section>
+					<h1>Real Demo</h1>
+					<p>
+					<a href="https://www.javascriptcookbook.com" target="_new">javascriptcookbook.com</a>
+					</p>
+					<aside class="notes">
+					be sure to mention the query string support
+					</aside>
+				</section>
+
+
 
 			</div>
 		</div>
