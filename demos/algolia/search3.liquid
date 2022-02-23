@@ -1,0 +1,59 @@
+---
+layout: main
+title: Search
+---
+
+
+<h2>Search</h2>
+
+<input type="search" id="searchField">
+<input type="button" id="searchButton" disabled value="Search">
+
+<div id="results"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.5.1/dist/algoliasearch-lite.umd.js"></script>
+
+<script>
+const client = algoliasearch('WFABFE7Z9Q', 'd1c88c3f98648a69f11cdd9d5a87de08');
+const index = client.initIndex('jamstack_search');
+let searchField, searchButton, resultsDiv;
+
+document.addEventListener('DOMContentLoaded', init, false);
+
+function init() {
+	searchField = document.querySelector('#searchField');
+	searchButton = document.querySelector('#searchButton');
+	resultsDiv = document.querySelector('#results');
+
+
+	searchButton.addEventListener('click', search, false);
+	searchButton.removeAttribute('disabled');
+
+}
+
+async function search() {
+	let term = searchField.value;
+	if(!term) return;
+	console.log('search for', term);
+
+	results = await index.search(term);
+
+
+	console.log(JSON.stringify(results));
+	if(results.hits.length === 0) {
+		resultsDiv.innerHTML = '<p>There were no results, sorry!</>';
+		return;
+	};
+
+	let result = `<h3>Results (${results.hits.length})</h3>`;
+	results.hits.forEach(r => {
+		result += `
+		<p>
+		<a href="${r.url}">${r.title}</a> (posted ${r.date})
+		</p>
+		`;
+	});
+	resultsDiv.innerHTML = result;
+
+}
+</script>
